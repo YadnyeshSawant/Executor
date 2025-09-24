@@ -20,4 +20,3 @@ buildNumber.properties
 # IDE specific files
 # VS Code
 .vscode/
-launch.json
