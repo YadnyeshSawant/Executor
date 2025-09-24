@@ -1,2 +1,23 @@
 # Compiled Java class files
 *.class
+
+# Log files
+*.log
+logs/
+
+# Maven build output
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+pom.xml.bak
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# IDE specific files
+# VS Code
+.vscode/
+launch.json
