@@ -109,13 +109,23 @@ import javax.swing.undo.UndoManager;
  */
 class PythonExecutor extends JFrame {
 
+    /** Preference key for storing the last used script directory path. */
     private static final String PREF_SCRIPT_DIR = "scriptDirectory";
+    /** Preference key for storing the last used input directory path. */
     private static final String PREF_INPUT_DIR = "inputDirectory";
+    /** Preference key for storing the last opened script file name. */
     private static final String PREF_LAST_SCRIPT = "lastScriptFile";
+    /** Preference key for storing the list of recently opened folders. */
     private static final String PREF_RECENT_FOLDERS = "recentFolders";
+    /** Preference key for storing the file explorer mode state. */
     private static final String PREF_EXPLORER_MODE = "fileExplorerMode";
 
+    /** Placeholder text for the script text area when it's empty. */
     private static final String SCRIPT_PLACEHOLDER = "Start typing or load a script...";
+    /**
+     * Single-threaded executor service for running background tasks like script
+     * execution and Git commands, ensuring they don't block the UI thread.
+     */
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private JButton runBtn;
     private JPanel mainPanel;
@@ -193,6 +203,12 @@ class PythonExecutor extends JFrame {
 
     private final boolean isPythonAvailable;
 
+    /**
+     * Constructs the PythonExecutor application window and initializes all UI
+     * components and event listeners.
+     *
+     * @param pythonExists A boolean indicating if a Python executable was found on the system PATH during startup.
+     */
     public PythonExecutor(boolean pythonExists) {
         this.isPythonAvailable = pythonExists;
         // Set up the main frame
@@ -918,6 +934,9 @@ class PythonExecutor extends JFrame {
         SwingUtilities.invokeLater(this::loadPreferences);
     }
 
+    /**
+     * Initializes the "Recent Folders" button and its associated popup menu.
+     */
     private void initializeRecentFolders() {
         recentFoldersPopup = new JPopupMenu();
         recentFoldersBtn = new JButton("Recent"); // Down-pointing triangle
@@ -932,6 +951,9 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Clears and repopulates the "Recent Folders" popup menu with the current list of recent folders.
+     */
     private void updateRecentFoldersPopup() {
         recentFoldersPopup.removeAll();
         if (recentFolders.isEmpty()) {
@@ -947,6 +969,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Handles the selection of a folder from the "Recent Folders" menu, prompting
+     * the user to set it as either the script or input folder.
+     *
+     * @param folder The {@link Path} of the folder selected by the user.
+     */
     private void openRecentFolder(Path folder) {
         Object[] options = {"Script Folder", "Input Folder", "Cancel"};
         int choice = JOptionPane.showOptionDialog(this,
@@ -979,6 +1007,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Creates and displays the settings dialog window if it doesn't already exist.
+     */
     private void openSettingsDialog() {
         if (settingsDialog == null) {
             settingsDialog = new JDialog(this, "Settings", true);
@@ -1055,6 +1086,11 @@ class PythonExecutor extends JFrame {
         settingsDialog.setVisible(true);
     }
 
+    /**
+     * Creates the panel that displays a table of all application keyboard shortcuts.
+     *
+     * @return A {@link JPanel} containing the shortcuts table.
+     */
     private JPanel createShortcutsPanel() {
         final Map<String, String> pendingShortcuts = new HashMap<>();
 
@@ -1148,6 +1184,13 @@ class PythonExecutor extends JFrame {
         return panel;
     }
 
+    /**
+     * Updates the keyboard shortcut for a specific action. It removes the old
+     * KeyStroke and adds the new one to the component's InputMap.
+     *
+     * @param actionMapKey The key identifying the action in the ActionMap.
+     * @param newShortcutString The new shortcut in a human-readable format (e.g., "Ctrl + S").
+     */
     private void updateShortcut(String actionMapKey, String newShortcutString) {
         InputMap inputMap = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap actionMap = getRootPane().getActionMap();
@@ -1235,6 +1278,11 @@ class PythonExecutor extends JFrame {
         return sb.toString();
     }
 
+    /**
+     * Sets the tab size (number of spaces) for the script and input text areas.
+     *
+     * @param size The number of spaces to use for a tab.
+     */
     private void setTabSize(int size) {
         if (size < 1) {
             size = 1;
@@ -1249,6 +1297,11 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Creates the panel for adjusting editor font and tab sizes within the settings dialog.
+     *
+     * @return A {@link JPanel} containing font and tab size controls and a preview area.
+     */
     private JPanel createFontSizePanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
@@ -1338,6 +1391,11 @@ class PythonExecutor extends JFrame {
         return panel;
     }
 
+    /**
+     * Creates the "General" settings panel, which includes options like resetting folder paths and toggling UI modes.
+     *
+     * @return A {@link JPanel} containing general application settings.
+     */
     private JPanel createGeneralSettingsPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 15));
         panel.setBorder(createBoldTitledBorder("General Settings"));
@@ -1378,6 +1436,10 @@ class PythonExecutor extends JFrame {
         return panel;
     }
 
+    /**
+     * Resets the application's saved script and input folder selections, clearing
+     * them from the UI and user preferences.
+     */
     private void resetFolderSelections() {
         Preferences prefs = Preferences.userNodeForPackage(PythonExecutor.class);
         prefs.remove(PREF_SCRIPT_DIR);
@@ -1410,6 +1472,9 @@ class PythonExecutor extends JFrame {
         outputTextArea.append(String.format("\n[%s] Folder selections have been reset.", timestamp));
     }
 
+    /**
+     * Initializes the file explorer components, including the JTree, context menu, and card layouts for empty/populated views.
+     */
     private void initializeFileExplorer() {
         // Create a root node that is not visible
         DefaultMutableTreeNode root = new DefaultMutableTreeNode();
@@ -1562,6 +1627,10 @@ class PythonExecutor extends JFrame {
         explorerSplitPane.setDividerSize(3);
     }
 
+    /**
+     * Populates the script file explorer tree with the contents of the currently
+     * selected script directory.
+     */
     private void populateFileExplorer() {
         if (scriptDirectory == null || fileExplorerTree == null) {
             // Clear the tree if no directory is selected
@@ -1579,6 +1648,13 @@ class PythonExecutor extends JFrame {
         fileExplorerTree.setModel(model);
     }
 
+    /**
+     * Recursively adds nodes to the file explorer tree, representing the
+     * directory structure and Python files within a given folder.
+     *
+     * @param parentNode The parent {@link DefaultMutableTreeNode} to which new file/folder nodes will be added.
+     * @param parentFile The parent {@link File} whose contents will be listed.
+     */
     private void addNodes(DefaultMutableTreeNode parentNode, File parentFile) {
         File[] files = parentFile.listFiles();
         if (files == null) {
@@ -1611,6 +1687,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Creates the right-click context menu for the file explorer trees.
+     */
     private void createExplorerContextMenu() {
         explorerContextMenu = new JPopupMenu();
         editMenuItem = new JMenuItem("Edit");
@@ -1630,6 +1709,14 @@ class PythonExecutor extends JFrame {
         explorerContextMenu.add(deleteMenuItem);
     }
 
+    /**
+     * Displays the file explorer context menu at the specified mouse location.
+     * It also sets the context path for the menu actions.
+     *
+     * @param tree The JTree where the right-click occurred.
+     * @param row The tree row that was clicked.
+     * @param e The MouseEvent that triggered the context menu.
+     */
     private void showContextMenu(JTree tree, int row, MouseEvent e) {
         tree.setSelectionRow(row);
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
@@ -1645,6 +1732,9 @@ class PythonExecutor extends JFrame {
         explorerContextMenu.show(tree, e.getX(), e.getY());
     }
 
+    /**
+     * Handles the "Edit" action from the file explorer context menu, loading the selected file into the appropriate editor.
+     */
     private void editSelectedFile() {
         if (contextMenuPath == null || !Files.isRegularFile(contextMenuPath)) {
             return;
@@ -1664,6 +1754,9 @@ class PythonExecutor extends JFrame {
         refreshAllExplorers();
     }
 
+    /**
+     * Handles the "Rename" action from the file explorer context menu, prompting the user for a new name and renaming the file/folder.
+     */
     private void renameSelectedItem() {
         if (contextMenuPath == null) {
             return;
@@ -1683,6 +1776,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Handles the "Delete" action from the file explorer context menu, confirming with the user before deleting the file/folder.
+     */
     private void deleteSelectedItem() {
         if (contextMenuPath == null) {
             return;
@@ -1711,6 +1807,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Handles the "Move" action from the file explorer context menu, allowing the user to move the selected item to a different directory.
+     */
     private void moveSelectedItem() {
         if (contextMenuPath == null) {
             return;
@@ -1734,6 +1833,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Refreshes the file explorer and combo box for a directory that has been
+     * modified (e.g., by a rename, delete, or move operation).
+     *
+     * @param path A path within the directory that needs refreshing.
+     */
     private void refreshExplorerForPath(Path path) {
         // Save the expanded paths before refreshing to restore them later
         List<TreePath> scriptExpandedPaths = new ArrayList<>();
@@ -1767,10 +1872,22 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * A convenience method that refreshes all file explorers and lists.
+     */
     private void refreshAllExplorers() {
         refreshAll(); // Use the main refresh method which handles selection restoration
     }
 
+    /**
+     * Creates a standardized header panel for the file explorers.
+     *
+     * @param title The title to display in the header.
+     * @param newFolderAction The action to perform when the "New Folder" button is clicked.
+     * @param newFileAction The action to perform when the "New File" button is clicked.
+     * @param collapseAction The action to perform for the collapse/expand button (can be null).
+     * @return A {@link JPanel} configured as an explorer header.
+     */
     private JPanel createExplorerHeaderPanel(String title, ActionListener newFolderAction, ActionListener newFileAction, ActionListener collapseAction) {
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setOpaque(false);
@@ -1809,6 +1926,11 @@ class PythonExecutor extends JFrame {
         return headerPanel;
     }
 
+    /**
+     * Applies a consistent style to toolbar buttons used in explorer headers.
+     *
+     * @param button The {@link JButton} to style.
+     */
     private void styleToolbarButton(JButton button) {
         button.setOpaque(false);
         button.setContentAreaFilled(false);
@@ -1831,6 +1953,13 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Creates a new file or folder in the specified parent directory after
+     * prompting the user for a name.
+     *
+     * @param parentDir The directory in which to create the new item.
+     * @param isFolder True to create a folder, false to create a file.
+     */
     private void createNewItem(Path parentDir, boolean isFolder) {
         if (parentDir == null) {
             JOptionPane.showMessageDialog(this, "Please open a folder first.", "Cannot Create Item", JOptionPane.WARNING_MESSAGE);
@@ -1870,6 +1999,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Toggles the collapsed/expanded state of the input file explorer panel.
+     *
+     * @param collapseButton The button that triggered the action, used to update its
+     * text/icon.
+     */
     private void toggleInputExplorerCollapse(JButton collapseButton) {
         isInputExplorerCollapsed = !isInputExplorerCollapsed;
         if (isInputExplorerCollapsed) {
@@ -1946,12 +2081,21 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Increases or decreases the font size of the main text areas.
+     *
+     * @param delta The amount to change the font size by (e.g., 1 or -1).
+     */
     private void changeFontSize(int delta) {
         Font currentFont = scriptTextArea.getFont();
         float newSize = currentFont.getSize() + delta;
         setFontSize(newSize);
     }
 
+    /**
+     * Sets the font size for the script, input, and output text areas.
+     * @param newSize The new font size.
+     */
     private void setFontSize(float newSize) {
         // Prevent font from becoming too small or too large
         if (newSize < 8) {
@@ -1967,6 +2111,9 @@ class PythonExecutor extends JFrame {
         outputTextArea.setFont(newFont);
     }
 
+    /**
+     * Initializes the popup menu used for displaying file search results.
+     */
     private void initializeSearchPopup() {
         searchResultPopup = new JPopupMenu();
         searchResultPopup.setFocusable(false); // Prevent the popup itself from stealing focus
@@ -2039,6 +2186,10 @@ class PythonExecutor extends JFrame {
         searchResultPopup.add(mainPopupPanel);
     }
 
+    /**
+     * Filters the script and input file lists based on the current search term and
+     * displays the results in a popup menu below the search field.
+     */
     private void updateAndShowSearchResults() {
         String searchTerm = searchField.getText().toLowerCase();
 
@@ -2066,6 +2217,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Creates a TitledBorder with a bold and slightly larger font.
+     *
+     * @param title The title for the border.
+     * @return A {@link TitledBorder} with custom styling.
+     */
     private TitledBorder createBoldTitledBorder(String title) {
         TitledBorder border = BorderFactory.createTitledBorder(title);
         Font currentFont = border.getTitleFont();
@@ -2073,10 +2230,16 @@ class PythonExecutor extends JFrame {
         return border;
     }
 
+    /**
+     * Toggles the UI between "File Explorer" mode and "Classic" mode.
+     */
     private void toggleFileExplorerMode() {
         setFileExplorerMode(!this.isFileExplorerMode);
     }
 
+    /**
+     * Toggles the visibility of the top control panels (file selection, execution controls).
+     */
     private void toggleControlsVisibility() {
         areControlsVisible = !areControlsVisible;
         scriptSelectionPanel.setVisible(areControlsVisible);
@@ -2086,6 +2249,12 @@ class PythonExecutor extends JFrame {
         repaint();
     }
 
+    /**
+     * Switches the main UI layout between "Classic" mode (with dropdowns) and
+     * "File Explorer" mode (with a file tree).
+     *
+     * @param enabled True to enable File Explorer mode, false to switch to Classic mode.
+     */
     private void setFileExplorerMode(boolean enabled) {
         if (this.isFileExplorerMode == enabled) {
             return;
@@ -2142,6 +2311,9 @@ class PythonExecutor extends JFrame {
         mainPanel.repaint();
     }
 
+    /**
+     * Toggles the visibility of the right-hand panel containing the input text area and controls.
+     */
     private void toggleInputPanelVisibility() {
         if (isInputPanelVisible) {
             lastMiddleDividerLocation = middleSplitPane.getDividerLocation();
@@ -2158,6 +2330,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Toggles the visibility of the bottom output panel.
+     */
     private void toggleOutputVisibility() {
         if (isOutputVisible) {
             lastDividerLocation = mainSplitPane.getDividerLocation();
@@ -2177,6 +2352,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Adds placeholder text to a JTextArea that appears when the text area is empty and not in focus.
+     *
+     * @param textArea The JTextArea to add the placeholder to.
+     * @param placeholder The placeholder text to display.
+     */
     private void addPlaceholder(JTextArea textArea, String placeholder) {
         // Set initial placeholder state
         textArea.setText(placeholder);
@@ -2201,6 +2382,11 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Executes the Python script currently in the script text area. It runs the
+     * script in a separate process, captures its standard output and error streams,
+     * and displays them in the output text area.
+     */
     private void executePythonScript() {
         if (!isPythonAvailable) {
             String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
@@ -2326,6 +2512,10 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Refreshes the file lists for both scripts and inputs by reloading them from
+     * their respective directories, attempting to preserve the current selection.
+     */
     private void refreshAll() {
         // Store the current selections
         Object selectedScript = scriptFileCombo.getSelectedItem();
@@ -2349,6 +2539,10 @@ class PythonExecutor extends JFrame {
         inputFileCombo.setSelectedItem(selectedInput);
     }
 
+    /**
+     * Saves the content of the script text area. If a file is already selected, it
+     * overwrites it. Otherwise, it prompts the user for a new file location.
+     */
     private void saveScript() {
         String scriptContent = scriptTextArea.getText();
         if (scriptContent.trim().isEmpty()) {
@@ -2396,6 +2590,13 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Writes the given content to the specified file path in a background thread.
+     * Updates the UI upon completion.
+     *
+     * @param path The {@link Path} of the file to save.
+     * @param content The string content to write to the file.
+     */
     private void saveToFile(Path path, String content) {
         new SwingWorker<Void, Void>() {
             @Override
@@ -2425,6 +2626,9 @@ class PythonExecutor extends JFrame {
         }.execute();
     }
 
+    /**
+     * Enables editing on the script text area if it is currently read-only.
+     */
     private void enableEditing() {
         if (!scriptTextArea.isEditable()) {
             scriptTextArea.setEditable(true);
@@ -2438,16 +2642,28 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Increments the total error count and updates the status bar label.
+     */
     private void incrementErrorCount() {
         totalErrors++;
         errorStatusLabel.setText(String.format("Errors: %d", totalErrors));
     }
 
+    /**
+     * Resets the total error count to zero and updates the status bar label.
+     */
     private void resetErrorCount() {
         totalErrors = 0;
         errorStatusLabel.setText("Errors: 0");
     }
 
+    /**
+     * Checks if a given path is already present in the script file combo box.
+     *
+     * @param path The {@link Path} to check for.
+     * @return True if the path exists in the combo box, false otherwise.
+     */
     private boolean isPathInComboBox(Path path) {
         for (int i = 0; i < scriptFileCombo.getItemCount(); i++) {
             Object item = scriptFileCombo.getItemAt(i);
@@ -2458,6 +2674,10 @@ class PythonExecutor extends JFrame {
         return false;
     }
 
+    /**
+     * Initiates the Git commit process by checking for staged files and then
+     * opening a dialog for the user to enter a commit message.
+     */
     private void showGitCommitDialog() {
         executorService.submit(() -> {
             Path repoPath = findGitRepository();
@@ -2493,6 +2713,13 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Creates and displays a dialog for committing staged files.
+     *
+     * @param repoPath The path to the Git repository.
+     * @param stagedFiles A list of files that are currently staged and will be
+     * committed.
+     */
     private void createAndShowCommitDialog(Path repoPath, List<String> stagedFiles) {
         JDialog dialog = new JDialog(this, "Commit Staged Files", true);
         dialog.setSize(600, 500);
@@ -2539,6 +2766,12 @@ class PythonExecutor extends JFrame {
         dialog.setVisible(true);
     }
 
+    /**
+     * Executes the `git commit` command with the provided message.
+     *
+     * @param repoPath The path to the Git repository.
+     * @param message The commit message.
+     */
     private void runGitCommit(Path repoPath, String message) {
         executorService.submit(() -> {
             try {
@@ -2553,6 +2786,9 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Executes the `git pull` command in the determined repository directory.
+     */
     private void runGitPull() {
         executorService.submit(() -> {
             Path repoPath = findGitRepository();
@@ -2595,6 +2831,9 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Executes the `git push` command in the determined repository directory.
+     */
     private void runGitPush() {
         executorService.submit(() -> {
             Path repoPath = findGitRepository();
@@ -2634,6 +2873,10 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Initiates the `git add` process by checking for uncommitted changes and
+     * displaying a dialog for the user to select which files to stage.
+     */
     private void showGitAddDialog() {
         executorService.submit(() -> {
             Path repoPath = findGitRepository();
@@ -2678,6 +2921,12 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Creates and displays a dialog allowing the user to select uncommitted files to stage.
+     *
+     * @param repoPath The path to the Git repository.
+     * @param files A list of uncommitted files.
+     */
     private void createAndShowAddDialog(Path repoPath, List<String> files) {
         String dialogTitle = String.format("Add Files to Staging (%d uncommitted files)", files.size());
         JDialog dialog = new JDialog(this, "Add Files to Staging", true); // Title bar of the window
@@ -2728,6 +2977,12 @@ class PythonExecutor extends JFrame {
         dialog.setVisible(true);
     }
 
+    /**
+     * Executes the `git add` command for the specified list of files.
+     *
+     * @param repoPath The path to the Git repository.
+     * @param filesToAdd A list of file paths (relative to the repo root) to add to staging.
+     */
     private void runGitAdd(Path repoPath, List<String> filesToAdd) {
         executorService.submit(() -> {
             String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
@@ -2749,6 +3004,10 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Opens a Git Bash terminal window in the appropriate working directory (either
+     * the Git repository root or the selected script folder).
+     */
     private void openGitBash() {
         String os = System.getProperty("os.name").toLowerCase();
         if (!os.contains("win")) {
@@ -2816,6 +3075,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Opens a new terminal window and displays the `git log` for the current
+     * repository.
+     */
     private void showGitLog() {
         executorService.submit(() -> {
             Path repoPath = findGitRepository();
@@ -2849,6 +3112,13 @@ class PythonExecutor extends JFrame {
         });
     }
 
+    /**
+     * Finds the root directory of a Git repository by searching upwards from the
+     * currently selected script or input directories.
+     *
+     * @return The {@link Path} to the Git repository root, or {@code null} if not
+     * found.
+     */
     private Path findGitRepository() {
         // Prioritize script directory, then input directory
         Path[] pathsToSearch = {scriptDirectory, inputDirectory};
@@ -2864,6 +3134,10 @@ class PythonExecutor extends JFrame {
         return null; // Not found
     }
 
+    /**
+     * Opens a file chooser dialog to allow the user to select a directory
+     * containing Python scripts.
+     */
     private void selectScriptFolder() {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -2886,6 +3160,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Loads all `.py` files from the selected script directory into the script
+     * file combo box and the internal file list.
+     */
     private void loadPythonScripts() {
         scriptFileCombo.removeAllItems();
         allScriptFiles.clear();
@@ -2905,6 +3183,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Loads the content of the script file selected in the combo box into the main
+     * script text area.
+     */
     private void loadSelectedScript() {
         Object selected = scriptFileCombo.getSelectedItem();
         if (selected instanceof Path) {
@@ -2950,6 +3232,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Opens a file chooser dialog to allow the user to select a directory
+     * containing input files.
+     */
     private void selectInputFolder() {
         JFileChooser chooser = new JFileChooser();
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -2973,6 +3259,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Updates the text and tooltip of the search field to show the current working directory.
+     */
     private void updateWorkingDirectory() {
         Path repoPath = findGitRepository();
         String pathText;
@@ -2989,6 +3278,10 @@ class PythonExecutor extends JFrame {
         searchField.setToolTipText(pathText);
     }
 
+    /**
+     * Loads all files from the selected input directory into the input file combo
+     * box and the internal file list.
+     */
     private void loadInputFiles() {
         inputFileCombo.removeAllItems();
         allInputFiles.clear();
@@ -3007,6 +3300,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Loads the content of the file selected in the input file combo box into the
+     * input text area.
+     */
     private void loadSelectedInputFile() {
         Object selected = inputFileCombo.getSelectedItem();
         if (selected instanceof Path) {
@@ -3046,6 +3343,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Opens a dialog to prompt the user for text to find within the script text
+     * area and highlights the next occurrence.
+     */
     private void findInScriptArea() {
         String searchTerm = (String) JOptionPane.showInputDialog(
                 this,
@@ -3087,6 +3388,10 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Populates the input file explorer tree with the contents of the currently
+     * selected input directory.
+     */
     private void populateInputFileExplorer() {
         if (inputDirectory == null || inputFileExplorerTree == null) {
             javax.swing.tree.DefaultTreeModel model = (javax.swing.tree.DefaultTreeModel) inputFileExplorerTree.getModel();
@@ -3103,6 +3408,13 @@ class PythonExecutor extends JFrame {
         inputFileExplorerTree.setModel(model);
     }
 
+    /**
+     * Recursively adds nodes to the input file explorer tree, representing the
+     * directory structure and files within a given folder.
+     *
+     * @param parentNode The parent {@link DefaultMutableTreeNode} to which new file/folder nodes will be added.
+     * @param parentFile The parent {@link File} whose contents will be listed.
+     */
     private void addInputNodes(DefaultMutableTreeNode parentNode, File parentFile) {
         File[] files = parentFile.listFiles();
         if (files == null) {
@@ -3214,6 +3526,10 @@ class PythonExecutor extends JFrame {
         @Override
         public Shape paintLayer(Graphics g, int offs0, int offs1, Shape bounds, javax.swing.text.JTextComponent c, View view) {
             g.setColor(Color.RED);
+            // This method is called by the highlighter to draw the squiggly line.
+            // It calculates the screen coordinates for the start and end of the highlight
+            // and then calls drawWave to do the actual drawing.
+
             try {
                 Rectangle r0 = c.modelToView(offs0);
                 Rectangle r1 = c.modelToView(offs1);
@@ -3229,6 +3545,14 @@ class PythonExecutor extends JFrame {
             return bounds;
         }
 
+        /**
+         * Draws a wavy (squiggly) line.
+         *
+         * @param g The Graphics context.
+         * @param x The starting x-coordinate.
+         * @param endX The ending x-coordinate.
+         * @param y The y-coordinate for the wave.
+         */
         private void drawWave(Graphics g, int x, int endX, int y) {
             for (int i = x; i < endX; i += WAVE_LENGTH) {
                 g.drawLine(i, y + WAVE_HEIGHT, i + WAVE_LENGTH / 2, y);
@@ -3244,6 +3568,12 @@ class PythonExecutor extends JFrame {
 
     }
 
+    /**
+     * Parses a Python error message to find a line number and then calls to
+     * highlight that line in the script editor.
+     *
+     * @param errorLine The line of text from the standard error stream.
+     */
     private void parseAndHighlightError(String errorLine) {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(", line (\\d+)").matcher(errorLine);
         if (matcher.find()) {
@@ -3255,6 +3585,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Adds a squiggly red underline highlight to a specific line in the script
+     * text area.
+     *
+     * @param lineNumber The 1-based line number to highlight.
+     */
     private void highlightErrorLine(int lineNumber) {
         try {
             int line = lineNumber - 1; // Convert to 0-based index
@@ -3265,6 +3601,9 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Removes all squiggly red error highlights from the script text area.
+     */
     private void clearErrorHighlights() {
         javax.swing.text.Highlighter highlighter = scriptTextArea.getHighlighter();
         for (javax.swing.text.Highlighter.Highlight h : highlighter.getHighlights()) {
@@ -3274,18 +3613,28 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Performs an undo action on the script text area.
+     */
     private void undo() {
         if (undoManager.canUndo()) {
             undoManager.undo();
         }
     }
 
+    /**
+     * Performs a redo action on the script text area.
+     */
     private void redo() {
         if (undoManager.canRedo()) {
             undoManager.redo();
         }
     }
 
+    /**
+     * Adds a folder to the list of recently used folders.
+     * @param folder The {@link Path} of the folder to add.
+     */
     private void addRecentFolder(Path folder) {
         if (folder == null) {
             return;
@@ -3490,6 +3839,11 @@ class PythonExecutor extends JFrame {
         String javaVersion;
     }
 
+    /**
+     * Checks if the application has write access to the system's temporary directory.
+     *
+     * @return {@code true} if a temporary file can be created and deleted, {@code false} otherwise.
+     */
     private static boolean checkTempDirAccess() {
         try {
             Path tempFile = Files.createTempFile("pyexec_check", ".tmp");
@@ -3500,6 +3854,11 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Checks if the application can read from and write to the Java Preferences store.
+     *
+     * @return {@code true} if preferences can be accessed, {@code false} otherwise.
+     */
     private static boolean checkPreferencesAccess() {
         try {
             Preferences prefs = Preferences.userNodeForPackage(PythonExecutor.class);
@@ -3512,6 +3871,11 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Checks if the `python` command is available on the system's PATH.
+     *
+     * @return {@code true} if Python is found, {@code false} otherwise.
+     */
     private static boolean isPythonInstalled() {
         try {
             ProcessBuilder pb = new ProcessBuilder("python", "--version");
@@ -3524,6 +3888,11 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Checks if the `git` command is available on the system's PATH.
+     *
+     * @return {@code true} if Git is found, {@code false} otherwise.
+     */
     private static boolean isGitInstalled() {
         try {
             ProcessBuilder pb = new ProcessBuilder("git", "--version");
@@ -3534,6 +3903,12 @@ class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * The main entry point for the application. It shows a loading screen,
+     * performs system checks, and then launches the main application window.
+     *
+     * @param args Command-line arguments (not used).
+     */
     public static void main(String[] args) {
         // Create the loading screen components and make the window visible
         LoadingScreen loadingScreen = createLoadingWindow();
