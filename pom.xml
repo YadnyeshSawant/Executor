@@ -55,6 +55,12 @@
         <plugin>
           <artifactId>maven-jar-plugin</artifactId>
           <version>3.0.2</version>
+          <executions>
+            <execution>
+              <id>default-jar</id>
+              <phase>none</phase>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <artifactId>maven-install-plugin</artifactId>
@@ -82,7 +88,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.1.0</version>
         <configuration>
-          <mainClass>executor.App</mainClass>
+          <mainClass>executor.PythonExecutor</mainClass>
         </configuration>
       </plugin>
       <plugin>
@@ -92,7 +98,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>executor.App</mainClass>
+              <mainClass>executor.PythonExecutor</mainClass>
             </manifest>
           </archive>
           <descriptorRefs>
