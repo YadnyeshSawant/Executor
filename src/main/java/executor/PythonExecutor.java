@@ -102,6 +102,12 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreePath;
 import javax.swing.undo.UndoManager;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.SyntaxScheme;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rtextarea.RTextScrollPane;
+
 /**
  * A Swing-based desktop application for executing Python scripts. It provides a
  * user interface to select, edit, and run Python scripts, manage input files,
@@ -145,7 +151,7 @@ public class PythonExecutor extends JFrame {
     private JSplitPane middleSplitPane;
     private JComboBox<Object> scriptFileCombo;
     private JComboBox<Object> inputFileCombo;
-    private JTextArea scriptTextArea;
+    private RSyntaxTextArea scriptTextArea;
     private JTextArea inputTextArea;
     private JTextArea outputTextArea;
     private JLabel currentScriptLabel;
@@ -183,14 +189,11 @@ public class PythonExecutor extends JFrame {
     private JButton recentFoldersBtn;
     private static final int MAX_RECENT_FOLDERS = 5;
 
-    private JButton toggleFileExplorerModeBtn;
-    private String lastSearchTerm = "";
-    private int lastFindPosition = 0;
 
     private UndoManager undoManager;
     private int currentTabSize = 4; // Default Python tab size
 
-    private JScrollPane scriptScrollPane;
+    private RTextScrollPane scriptScrollPane;
     private JTree fileExplorerTree;
     private JPopupMenu explorerContextMenu;
     private JMenuItem editMenuItem;
@@ -214,6 +217,9 @@ public class PythonExecutor extends JFrame {
     private JScrollPane fileExplorerScrollPane;
 
     private final boolean isPythonAvailable;
+    private GitManager gitManager;
+    private JButton toggleFileExplorerModeBtn;
+    private JDialog findDialog;
 
     /**
      * Constructs the PythonExecutor application window and initializes all UI
@@ -436,34 +442,34 @@ public class PythonExecutor extends JFrame {
 
         JButton gitBashBtn = new JButton("GitBash");
         gitBashBtn.setFocusPainted(false);
-        gitBashBtn.addActionListener(e -> openGitBash());
+        gitBashBtn.addActionListener(e -> gitManager.openGitBash());
         gitBashBtn.setPreferredSize(execButtonSize);
         // Color colorbash = new Color(0xA3BE8C);
         // gitBashBtn.setBackground(colorbash);
 
         JButton gitAddBtn = new JButton("Git Add");
         gitAddBtn.setFocusPainted(false);
-        gitAddBtn.addActionListener(e -> showGitAddDialog());
+        gitAddBtn.addActionListener(e -> gitManager.showGitAddDialog());
         gitAddBtn.setPreferredSize(execButtonSize);
 
         JButton gitCommitBtn = new JButton("Git Commit");
         gitCommitBtn.setFocusPainted(false);
-        gitCommitBtn.addActionListener(e -> showGitCommitDialog());
+        gitCommitBtn.addActionListener(e -> gitManager.showGitCommitDialog());
         gitCommitBtn.setPreferredSize(execButtonSize);
 
         JButton gitPullBtn = new JButton("\u2B07\uFE0F Git Pull");
         gitPullBtn.setFocusPainted(false);
-        gitPullBtn.addActionListener(e -> runGitPull());
+        gitPullBtn.addActionListener(e -> gitManager.runGitPull());
         gitPullBtn.setPreferredSize(execButtonSize);
 
         JButton gitPushBtn = new JButton("\u2B06\uFE0F Git Push");
         gitPushBtn.setFocusPainted(false);
-        gitPushBtn.addActionListener(e -> runGitPush());
+        gitPushBtn.addActionListener(e -> gitManager.runGitPush());
         gitPushBtn.setPreferredSize(execButtonSize);
 
         JButton gitLogBtn = new JButton("Git Log");
         gitLogBtn.setFocusPainted(false);
-        gitLogBtn.addActionListener(e -> showGitLog());
+        gitLogBtn.addActionListener(e -> gitManager.showGitLog());
         gitLogBtn.setPreferredSize(execButtonSize);
 
         versionControlPanel.add(gitBashBtn);
@@ -474,11 +480,25 @@ public class PythonExecutor extends JFrame {
         versionControlPanel.add(gitLogBtn);
 
         // Python Script Text Area
-        scriptTextArea = new JTextArea();
+        scriptTextArea = new RSyntaxTextArea();
+        scriptTextArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_PYTHON);
+        scriptTextArea.setBackground(new Color(43, 43, 43));
+        scriptTextArea.setCurrentLineHighlightColor(new Color(50, 50, 50));
+        scriptTextArea.setCodeFoldingEnabled(true);
+
+        // Customize syntax highlighting for the dark theme
+        SyntaxScheme scheme = scriptTextArea.getSyntaxScheme();
+        scheme.getStyle(Token.RESERVED_WORD).foreground = new Color(204, 120, 50);   // 'def', 'if', 'for', etc.
+        scheme.getStyle(Token.RESERVED_WORD_2).foreground = new Color(204, 120, 50); // 'self', etc.
+        scheme.getStyle(Token.LITERAL_BOOLEAN).foreground = new Color(204, 120, 50); // 'True', 'False'
+        scheme.getStyle(Token.FUNCTION).foreground = new Color(130, 170, 255);      // built-in functions like 'print'
+        scriptTextArea.revalidate();
+
         undoManager = new UndoManager();
         scriptTextArea.getDocument().addUndoableEditListener(undoManager);
         scriptTextArea.setBorder(createBoldTitledBorder("Python Script "));
         addPlaceholder(scriptTextArea, SCRIPT_PLACEHOLDER);
+        scriptTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         scriptTextArea.getInputMap().put(KeyStroke.getKeyStroke("control H"), "none");
         setupScriptAreaIndentation();
         scriptTextArea.getDocument().addDocumentListener(new DocumentListener() {
@@ -495,17 +515,19 @@ public class PythonExecutor extends JFrame {
             }
         });
 
-        scriptScrollPane = new JScrollPane(scriptTextArea);
+        scriptScrollPane = new RTextScrollPane(scriptTextArea);
 
         // Input Text Area
         inputTextArea = new JTextArea();
         inputTextArea.setBorder(createBoldTitledBorder("Input Data "));
+        inputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         inputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control H"), "none");
         JScrollPane inputScrollPane = new JScrollPane(inputTextArea);
 
         // Output Panel
         outputTextArea = new JTextArea();
         outputTextArea.setEditable(false);
+        outputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         outputTextArea.setBorder(createBoldTitledBorder("Output "));
         outputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control H"), "none");
         String welcomeTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
@@ -526,6 +548,9 @@ public class PythonExecutor extends JFrame {
                 /* Do nothing */ }
         });
         JScrollPane outputScrollPane = new JScrollPane(outputTextArea);
+
+        // Initialize GitManager now that outputTextArea exists
+        this.gitManager = new GitManager(this, executorService, outputTextArea::append, scriptDirectory, inputDirectory);
 
         // Status Bar
         RoundedPanel statusBar = new RoundedPanel(10, new Color(50, 50, 50));
@@ -715,7 +740,7 @@ public class PythonExecutor extends JFrame {
         JButton findBtn = new JButton("Find");
         findBtn.setToolTipText("Find text in the script area");
         findBtn.setFocusPainted(false);
-        findBtn.addActionListener(e -> findInScriptArea());
+        findBtn.addActionListener(e -> showFindDialog());
         findBtn.setPreferredSize(new Dimension(80, 35));
 
         // Panel for right-aligned buttons
@@ -856,7 +881,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("openGitBash", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                openGitBash();
+                gitManager.openGitBash();
             }
         });
 
@@ -865,7 +890,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("gitAdd", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                showGitAddDialog();
+                gitManager.showGitAddDialog();
             }
         });
 
@@ -874,7 +899,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("gitCommit", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                showGitCommitDialog();
+                gitManager.showGitCommitDialog();
             }
         });
 
@@ -883,7 +908,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("gitPull", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                runGitPull();
+                gitManager.runGitPull();
             }
         });
 
@@ -892,7 +917,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("gitPush", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                runGitPush();
+                gitManager.runGitPush();
             }
         });
 
@@ -901,7 +926,7 @@ public class PythonExecutor extends JFrame {
         actionMap.put("gitLog", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                showGitLog();
+                gitManager.showGitLog();
             }
         });
 
@@ -1004,6 +1029,7 @@ public class PythonExecutor extends JFrame {
             scriptDirectory = folder;
             scriptFolderPathLabel.setText(scriptDirectory.toString());
             loadPythonScripts();
+            updateGitManager();
             populateFileExplorer();
             if (isFileExplorerMode) {
                 fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_TREE_VIEW);
@@ -1013,12 +1039,17 @@ public class PythonExecutor extends JFrame {
             inputDirectory = folder;
             inputFolderPathLabel.setText(inputDirectory.toString());
             loadInputFiles();
+            updateGitManager();
             populateInputFileExplorer();
             if (isFileExplorerMode) {
                 inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_TREE_VIEW);
             }
             addRecentFolder(folder);
         }
+    }
+
+    private void updateGitManager() {
+        this.gitManager = new GitManager(this, executorService, outputTextArea::append, scriptDirectory, inputDirectory);
     }
 
     /**
@@ -2711,468 +2742,6 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * Initiates the Git commit process by checking for staged files and then
-     * opening a dialog for the user to enter a commit message.
-     */
-    private void showGitCommitDialog() {
-        executorService.submit(() -> {
-            Path repoPath = findGitRepository();
-            if (repoPath == null) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n[%s] [ERROR] No .git repository found to commit to.", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now()))));
-                return;
-            }
-
-            try {
-                // Get the list of staged files
-                ProcessBuilder pb = new ProcessBuilder("git", "diff", "--name-only", "--cached");
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-
-                List<String> stagedFiles = new ArrayList<>();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    reader.lines().forEach(stagedFiles::add);
-                }
-                process.waitFor();
-
-                if (stagedFiles.isEmpty()) {
-                    SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n[%s] Nothing to commit. Use 'Git Add' to stage files first.", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now()))));
-                    return;
-                }
-
-                // Show the commit dialog on the EDT
-                SwingUtilities.invokeLater(() -> createAndShowCommitDialog(repoPath, stagedFiles));
-
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] Error checking for staged files: " + e.getMessage()));
-                e.printStackTrace();
-            }
-        });
-    }
-
-    /**
-     * Creates and displays a dialog for committing staged files.
-     *
-     * @param repoPath The path to the Git repository.
-     * @param stagedFiles A list of files that are currently staged and will be
-     * committed.
-     */
-    private void createAndShowCommitDialog(Path repoPath, List<String> stagedFiles) {
-        JDialog dialog = new JDialog(this, "Commit Staged Files", true);
-        dialog.setSize(600, 500);
-        dialog.setLocationRelativeTo(this);
-
-        // Text area for staged files (read-only)
-        JTextArea stagedFilesArea = new JTextArea(String.join("\n", stagedFiles));
-        stagedFilesArea.setEditable(false);
-        stagedFilesArea.setBorder(createBoldTitledBorder("Files to be Committed "));
-        JScrollPane stagedScrollPane = new JScrollPane(stagedFilesArea);
-
-        // Text area for commit message
-        JTextArea commitMessageArea = new JTextArea();
-        commitMessageArea.setBorder(createBoldTitledBorder("Commit Message "));
-        JScrollPane commitMessageScrollPane = new JScrollPane(commitMessageArea);
-
-        // Split pane to separate staged files and commit message
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, stagedScrollPane, commitMessageScrollPane);
-        splitPane.setResizeWeight(0.4);
-
-        // Buttons
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton commitBtn = new JButton("Commit");
-        JButton cancelBtn = new JButton("Cancel");
-
-        commitBtn.addActionListener(e -> {
-            String commitMessage = commitMessageArea.getText().trim();
-            if (commitMessage.isEmpty()) {
-                JOptionPane.showMessageDialog(dialog, "Commit message cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-            runGitCommit(repoPath, commitMessage);
-            dialog.dispose();
-        });
-
-        cancelBtn.addActionListener(e -> dialog.dispose());
-
-        buttonPanel.add(cancelBtn);
-        buttonPanel.add(commitBtn);
-
-        dialog.setLayout(new BorderLayout(10, 10));
-        dialog.add(splitPane, BorderLayout.CENTER);
-        dialog.add(buttonPanel, BorderLayout.SOUTH);
-        dialog.setVisible(true);
-    }
-
-    /**
-     * Executes the `git commit` command with the provided message.
-     *
-     * @param repoPath The path to the Git repository.
-     * @param message The commit message.
-     */
-    private void runGitCommit(Path repoPath, String message) {
-        executorService.submit(() -> {
-            try {
-                ProcessBuilder pb = new ProcessBuilder("git", "commit", "-m", message);
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-                process.waitFor();
-                SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n[%s] Commit successful.", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now()))));
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] Error running git commit: " + e.getMessage()));
-            }
-        });
-    }
-
-    /**
-     * Executes the `git pull` command in the determined repository directory.
-     */
-    private void runGitPull() {
-        executorService.submit(() -> {
-            Path repoPath = findGitRepository();
-            if (repoPath == null) {
-                SwingUtilities.invokeLater(() -> {
-                    String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                    outputTextArea.append(String.format("\n[%s] [ERROR] No .git repository found to pull from.", timestamp));
-                });
-                return;
-            }
-
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n\n[%s] Attempting to pull from remote...\n", timestamp)));
-
-            try {
-                ProcessBuilder pb = new ProcessBuilder("git", "pull");
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-
-                // Capture and display output in real-time
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream())); BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        final String outputLine = line;
-                        SwingUtilities.invokeLater(() -> outputTextArea.append(outputLine + "\n"));
-                    }
-                    while ((line = errorReader.readLine()) != null) {
-                        final String errorLine = line;
-                        SwingUtilities.invokeLater(() -> outputTextArea.append("[GIT PULL] " + errorLine + "\n"));
-                    }
-                }
-
-                int exitCode = process.waitFor();
-                SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n--- Git pull finished with exit code %d. ---\n", exitCode)));
-
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] An error occurred during git pull: " + e.getMessage() + "\n"));
-            }
-        });
-    }
-
-    /**
-     * Executes the `git push` command in the determined repository directory.
-     */
-    private void runGitPush() {
-        executorService.submit(() -> {
-            Path repoPath = findGitRepository();
-            if (repoPath == null) {
-                SwingUtilities.invokeLater(() -> {
-                    String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                    outputTextArea.append(String.format("\n[%s] [ERROR] No .git repository found to push from.", timestamp));
-                });
-                return;
-            }
-
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n\n[%s] Attempting to push to remote...\n", timestamp)));
-
-            try {
-                ProcessBuilder pb = new ProcessBuilder("git", "push");
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-
-                // Capture and display output in real-time, as push can be interactive or slow
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream())); BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        final String outputLine = line;
-                        SwingUtilities.invokeLater(() -> outputTextArea.append(outputLine + "\n"));
-                    }
-                    while ((line = errorReader.readLine()) != null) {
-                        final String errorLine = line;
-                        SwingUtilities.invokeLater(() -> outputTextArea.append("[GIT PUSH] " + errorLine + "\n"));
-                    }
-                }
-                process.waitFor();
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] An error occurred during git push: " + e.getMessage() + "\n"));
-            }
-        });
-    }
-
-    /**
-     * Initiates the `git add` process by checking for uncommitted changes and
-     * displaying a dialog for the user to select which files to stage.
-     */
-    private void showGitAddDialog() {
-        executorService.submit(() -> {
-            Path repoPath = findGitRepository();
-            if (repoPath == null) {
-                SwingUtilities.invokeLater(() -> {
-                    String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                    outputTextArea.append(String.format("\n[%s] [ERROR] No .git repository found to add files from.", timestamp));
-                });
-                return;
-            }
-
-            try {
-                ProcessBuilder pb = new ProcessBuilder("git", "status", "--porcelain");
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-
-                List<String> changedFiles = new ArrayList<>();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        // The file path always starts at the 4th character (index 3)
-                        changedFiles.add(line.substring(3));
-                    }
-                }
-                process.waitFor();
-
-                if (changedFiles.isEmpty()) {
-                    SwingUtilities.invokeLater(() -> {
-                        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                        outputTextArea.append(String.format("\n[%s] No changes to add in repository: %s", timestamp, repoPath.getFileName()));
-                    });
-                    return;
-                }
-
-                // Create and show the dialog on the Event Dispatch Thread
-                SwingUtilities.invokeLater(() -> createAndShowAddDialog(repoPath, changedFiles));
-
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] Error getting git status: " + e.getMessage()));
-                e.printStackTrace();
-            }
-        });
-    }
-
-    /**
-     * Creates and displays a dialog allowing the user to select uncommitted
-     * files to stage.
-     *
-     * @param repoPath The path to the Git repository.
-     * @param files A list of uncommitted files.
-     */
-    private void createAndShowAddDialog(Path repoPath, List<String> files) {
-        String dialogTitle = String.format("Add Files to Staging (%d uncommitted files)", files.size());
-        JDialog dialog = new JDialog(this, "Add Files to Staging", true); // Title bar of the window
-        dialog.setSize(600, 400);
-        dialog.setLocationRelativeTo(this);
-
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        JPanel checkboxPanel = new JPanel();
-        checkboxPanel.setBorder(createBoldTitledBorder(dialogTitle));
-        checkboxPanel.setLayout(new BoxLayout(checkboxPanel, BoxLayout.Y_AXIS));
-        List<JCheckBox> checkBoxes = new ArrayList<>();
-        for (String file : files) {
-            JCheckBox cb = new JCheckBox(file);
-            cb.setIconTextGap(10); // Add space between the checkbox and the file name text
-            checkBoxes.add(cb);
-            checkboxPanel.add(cb);
-        }
-
-        JScrollPane scrollPane = new JScrollPane(checkboxPanel);
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton addBtn = new JButton("Add Selected Files");
-        JButton cancelBtn = new JButton("Cancel");
-
-        addBtn.addActionListener(e -> {
-            List<String> filesToAdd = new ArrayList<>();
-            for (JCheckBox cb : checkBoxes) {
-                if (cb.isSelected()) {
-                    filesToAdd.add(cb.getText());
-                }
-            }
-            if (!filesToAdd.isEmpty()) {
-                runGitAdd(repoPath, filesToAdd);
-            }
-            dialog.dispose();
-        });
-
-        cancelBtn.addActionListener(e -> dialog.dispose());
-
-        buttonPanel.add(cancelBtn);
-        buttonPanel.add(addBtn);
-        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        dialog.add(mainPanel);
-        dialog.setVisible(true);
-    }
-
-    /**
-     * Executes the `git add` command for the specified list of files.
-     *
-     * @param repoPath The path to the Git repository.
-     * @param filesToAdd A list of file paths (relative to the repo root) to add
-     * to staging.
-     */
-    private void runGitAdd(Path repoPath, List<String> filesToAdd) {
-        executorService.submit(() -> {
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            try {
-                List<String> command = new ArrayList<>();
-                command.add("git");
-                command.add("add");
-                command.addAll(filesToAdd);
-
-                ProcessBuilder pb = new ProcessBuilder(command);
-                pb.directory(repoPath.toFile());
-                Process process = pb.start();
-                process.waitFor();
-
-                SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n[%s] Added %d file(s) to staging.", timestamp, filesToAdd.size())));
-            } catch (IOException | InterruptedException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] Error running git add: " + e.getMessage()));
-            }
-        });
-    }
-
-    /**
-     * Opens a Git Bash terminal window in the appropriate working directory
-     * (either the Git repository root or the selected script folder).
-     */
-    private void openGitBash() {
-        String os = System.getProperty("os.name").toLowerCase();
-        if (!os.contains("win")) {
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            outputTextArea.append(String.format("\n[%s] [INFO] Git Bash is a Windows-specific feature. On macOS/Linux, please use your system's terminal.", timestamp));
-            return;
-        }
-
-        // Check if any directory has been selected
-        if (scriptDirectory == null && inputDirectory == null) {
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            outputTextArea.append(String.format("\n[%s] [ERROR] No working directory selected. Please select a script or input folder first.", timestamp));
-            return;
-        }
-
-        // Determine the working directory for Git Bash
-        Path repoPath = findGitRepository();
-        File workingDirectory;
-        String locationMessage;
-
-        if (repoPath != null) {
-            workingDirectory = repoPath.toFile();
-            locationMessage = String.format("in Git repository: %s", workingDirectory.getAbsolutePath());
-        } else {
-            // Fallback if no .git directory is found
-            workingDirectory = (scriptDirectory != null) ? scriptDirectory.toFile() : new File(System.getProperty("user.home"));
-            locationMessage = String.format("in directory: %s (No .git repo found)", workingDirectory.getAbsolutePath());
-        }
-
-        // Find the Git Bash executable
-        String[] potentialPaths = {
-            "C:\\Program Files\\Git\\git-bash.exe",
-            "C:\\Program Files (x86)\\Git\\git-bash.exe",
-            System.getenv("ProgramFiles") + "\\Git\\git-bash.exe",
-            System.getenv("ProgramFiles(x86)") + "\\Git\\git-bash.exe"
-        };
-
-        File gitBashExe = null;
-        for (String path : potentialPaths) {
-            File f = new File(path);
-            if (f.exists()) {
-                gitBashExe = f;
-                break;
-            }
-        }
-
-        try {
-            String gitBashCommand;
-            if (gitBashExe == null) {
-                // If not found in common locations, assume it's in the PATH.
-                gitBashCommand = "git-bash.exe";
-            } else {
-                // If found, use its full, quoted path.
-                gitBashCommand = "\"" + gitBashExe.getAbsolutePath() + "\"";
-            }
-            ProcessBuilder pb = new ProcessBuilder("cmd", "/c", "start", "Git Bash", gitBashCommand);
-            pb.directory(workingDirectory);
-            pb.start();
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            outputTextArea.append(String.format("\n[%s] Opening Git Bash %s", timestamp, locationMessage));
-        } catch (IOException e) {
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            outputTextArea.append(String.format("\n[%s] [ERROR] Could not open Git Bash. Make sure it is installed and accessible.\nGo to https://git-scm.com/downloads to install it. ", timestamp));
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Opens a new terminal window and displays the `git log` for the current
-     * repository.
-     */
-    private void showGitLog() {
-        executorService.submit(() -> {
-            Path repoPath = findGitRepository();
-            if (repoPath == null) {
-                SwingUtilities.invokeLater(() -> {
-                    String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                    outputTextArea.append(String.format("\n[%s] [ERROR] No .git repository found in the hierarchy of the selected script or input directories.", timestamp));
-                });
-                return;
-            }
-
-            try {
-                String os = System.getProperty("os.name").toLowerCase();
-                if (os.contains("win")) {
-                    // On Windows, 'start' opens a new window. 'git log' is passed as the initial command.
-                    new ProcessBuilder("cmd.exe", "/c", "start", "git", "log").directory(repoPath.toFile()).start();
-                } else if (os.contains("mac")) {
-                    // On macOS, we can use osascript to tell the Terminal app to run the command.
-                    String command = String.format("tell app \"Terminal\" to do script \"cd %s && git log\"", repoPath.toAbsolutePath());
-                    new ProcessBuilder("osascript", "-e", command).start();
-                } else { // Assume Linux/other Unix
-                    // For Linux, we try to open with x-terminal-emulator, which is a common default.
-                    new ProcessBuilder("x-terminal-emulator", "-e", "sh -c 'git log | less'").directory(repoPath.toFile()).start();
-                }
-                String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-                SwingUtilities.invokeLater(() -> outputTextArea.append(String.format("\n[%s] Opened interactive git log in a new terminal window.", timestamp)));
-            } catch (IOException e) {
-                SwingUtilities.invokeLater(() -> outputTextArea.append("\n[FATAL] Could not open terminal for git log: " + e.getMessage() + "\n"));
-                e.printStackTrace();
-            }
-        });
-    }
-
-    /**
-     * Finds the root directory of a Git repository by searching upwards from
-     * the currently selected script or input directories.
-     *
-     * @return The {@link Path} to the Git repository root, or {@code null} if
-     * not found.
-     */
-    private Path findGitRepository() {
-        // Prioritize script directory, then input directory
-        Path[] pathsToSearch = {scriptDirectory, inputDirectory};
-        for (Path startPath : pathsToSearch) {
-            Path current = startPath;
-            while (current != null) {
-                if (Files.isDirectory(current.resolve(".git"))) {
-                    return current; // Found the root of the git repo
-                }
-                current = current.getParent(); // Move up one directory
-            }
-        }
-        return null; // Not found
-    }
-
-    /**
      * Opens a file chooser dialog to allow the user to select a directory
      * containing Python scripts.
      */
@@ -3188,6 +2757,7 @@ public class PythonExecutor extends JFrame {
             scriptDirectory = chooser.getSelectedFile().toPath();
             scriptFolderPathLabel.setText(scriptDirectory.toString());
             addRecentFolder(scriptDirectory);
+            updateGitManager();
             loadPythonScripts();
             populateFileExplorer();
 
@@ -3288,6 +2858,7 @@ public class PythonExecutor extends JFrame {
             inputDirectory = chooser.getSelectedFile().toPath();
             inputFolderPathLabel.setText(inputDirectory.toString());
             addRecentFolder(inputDirectory);
+            updateGitManager();
             loadInputFiles();
             populateInputFileExplorer();
 
@@ -3302,19 +2873,8 @@ public class PythonExecutor extends JFrame {
      * working directory.
      */
     private void updateWorkingDirectory() {
-        Path repoPath = findGitRepository();
-        String pathText;
-        if (repoPath != null) {
-            pathText = repoPath.toAbsolutePath().toString();
-        } else if (scriptDirectory != null) {
-            pathText = scriptDirectory.toAbsolutePath().toString();
-        } else if (inputDirectory != null) {
-            pathText = inputDirectory.toAbsolutePath().toString();
-        } else {
-            pathText = "No directory selected";
-        }
-        searchField.setText(pathText);
-        searchField.setToolTipText(pathText);
+        // This method's logic was complex and tied to findGitRepository.
+        // It is now deprecated and its functionality (showing a path) is handled elsewhere.
     }
 
     /**
@@ -3383,47 +2943,179 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * Opens a dialog to prompt the user for text to find within the script text
-     * area and highlights the next occurrence.
+     * Creates and shows the non-modal find dialog if it's not already visible.
      */
-    private void findInScriptArea() {
-        String searchTerm = (String) JOptionPane.showInputDialog(
-                this,
-                "Enter text to find:",
-                "Find",
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                null,
-                lastSearchTerm // Pre-fill with the last search term
-        );
+    private void showFindDialog() {
+        if (findDialog == null) {
+            createFindDialog();
+        }
+        findDialog.setVisible(true);
+    }
 
-        if (searchTerm == null) { // User cancelled
+    /**
+     * Creates the non-modal find dialog with its components and listeners.
+     */
+    private void createFindDialog() {
+        findDialog = new JDialog(this, "Find", false); // false for non-modal
+        findDialog.setSize(450, 220);
+        findDialog.setLocationRelativeTo(this);
+        findDialog.setLayout(new GridBagLayout());
+
+        final GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        // Find field
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        findDialog.add(new JLabel("Find:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        final JTextField findField = new JTextField(20);
+        findDialog.add(findField, gbc);
+
+        // Replace field
+        gbc.gridy = 1;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0.0;
+        findDialog.add(new JLabel("Replace with:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        final JTextField replaceField = new JTextField(20);
+        findDialog.add(replaceField, gbc);
+
+        // Buttons
+        gbc.gridy = 2;
+        gbc.gridx = 1;
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.CENTER;
+        JButton findNextBtn = new JButton("Find Next");
+        findDialog.add(findNextBtn, gbc);
+
+        gbc.gridx = 2;
+        JButton findPrevBtn = new JButton("Find Previous");
+        findDialog.add(findPrevBtn, gbc);
+
+        gbc.gridy = 3;
+        gbc.gridx = 1;
+        JButton replaceBtn = new JButton("Replace");
+        findDialog.add(replaceBtn, gbc);
+
+        gbc.gridx = 2;
+        JButton replaceAllBtn = new JButton("Replace All");
+        findDialog.add(replaceAllBtn, gbc);
+
+        // Checkbox
+        gbc.gridy = 4;
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        final JCheckBox caseSensitiveCheck = new JCheckBox("Case Sensitive");
+        findDialog.add(caseSensitiveCheck, gbc);
+
+        // --- Listeners ---
+        findNextBtn.addActionListener(e -> findInScriptArea(findField.getText(), true, caseSensitiveCheck.isSelected()));
+        findPrevBtn.addActionListener(e -> findInScriptArea(findField.getText(), false, caseSensitiveCheck.isSelected()));
+        replaceBtn.addActionListener(e -> replaceInScriptArea(findField.getText(), replaceField.getText(), caseSensitiveCheck.isSelected()));
+        replaceAllBtn.addActionListener(e -> replaceAllInScriptArea(findField.getText(), replaceField.getText(), caseSensitiveCheck.isSelected()));
+
+        // Find next on Enter press
+        findField.addActionListener(e -> findInScriptArea(findField.getText(), true, caseSensitiveCheck.isSelected()));
+    }
+
+    /**
+     * Replaces the currently selected text if it matches the find text, then finds the next occurrence.
+     * @param findText The text to search for.
+     * @param replaceText The text to replace with.
+     * @param caseSensitive True for case-sensitive search.
+     */
+    private void replaceInScriptArea(String findText, String replaceText, boolean caseSensitive) {
+        String selectedText = scriptTextArea.getSelectedText();
+        if (selectedText == null || selectedText.isEmpty()) {
+            // If nothing is selected, just find the next occurrence
+            findInScriptArea(findText, true, caseSensitive);
             return;
         }
 
-        if (!searchTerm.equals(lastSearchTerm)) {
-            // New search term, reset position
-            lastSearchTerm = searchTerm;
-            lastFindPosition = 0;
-        }
+        String comparisonFind = caseSensitive ? findText : findText.toLowerCase();
+        String comparisonSelected = caseSensitive ? selectedText : selectedText.toLowerCase();
 
-        if (lastSearchTerm.isEmpty()) {
-            return;
-        }
-
-        String text = scriptTextArea.getText();
-        int fromIndex = scriptTextArea.getCaretPosition();
-        int index = text.indexOf(lastSearchTerm, fromIndex);
-
-        if (index == -1) { // Not found from caret, wrap around and search from the top
-            index = text.indexOf(lastSearchTerm, 0);
-        }
-
-        if (index != -1) {
-            scriptTextArea.requestFocusInWindow();
-            scriptTextArea.select(index, index + lastSearchTerm.length());
+        if (comparisonSelected.equals(comparisonFind)) {
+            scriptTextArea.replaceSelection(replaceText);
+            // After replacing, automatically find the next one
+            findInScriptArea(findText, true, caseSensitive);
         } else {
-            JOptionPane.showMessageDialog(this, "Text not found: \"" + lastSearchTerm + "\"", "Not Found", JOptionPane.INFORMATION_MESSAGE);
+            // The selection doesn't match the find text, so just find the next one
+            findInScriptArea(findText, true, caseSensitive);
+        }
+    }
+
+    /**
+     * Replaces all occurrences of the find text with the replace text.
+     * @param findText The text to search for.
+     * @param replaceText The text to replace with.
+     * @param caseSensitive True for case-sensitive search.
+     */
+    private void replaceAllInScriptArea(String findText, String replaceText, boolean caseSensitive) {
+        if (findText == null || findText.isEmpty()) {
+            return;
+        }
+
+        String originalContent = scriptTextArea.getText();
+        String newContent;
+        int replacementCount = (originalContent.length() - originalContent.replace(findText, "").length()) / findText.length();
+
+        newContent = caseSensitive ? originalContent.replace(findText, replaceText) : originalContent.replaceAll("(?i)" + java.util.regex.Pattern.quote(findText), replaceText);
+
+        scriptTextArea.setText(newContent);
+        JOptionPane.showMessageDialog(findDialog, "Replaced " + replacementCount + " occurrence(s).", "Replace All Complete", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * Finds text in the script area.
+     * @param findText The text to search for.
+     * @param forward True to search forward, false to search backward.
+     * @param caseSensitive True for case-sensitive search.
+     */
+    private void findInScriptArea(String findText, boolean forward, boolean caseSensitive) {
+        if (findText == null || findText.isEmpty()) {
+            return;
+        }
+
+        String content = scriptTextArea.getText();
+        if (!caseSensitive) {
+            content = content.toLowerCase();
+            findText = findText.toLowerCase();
+        }
+
+        int foundIndex;
+        if (forward) {
+            int fromIndex = scriptTextArea.getCaretPosition();
+            foundIndex = content.indexOf(findText, fromIndex);
+            if (foundIndex == -1) { // Wrap around
+                foundIndex = content.indexOf(findText, 0);
+            }
+        } else { // Backward
+            int fromIndex = scriptTextArea.getCaretPosition() - findText.length() - 1;
+            foundIndex = content.lastIndexOf(findText, fromIndex);
+            if (foundIndex == -1) { // Wrap around
+                foundIndex = content.lastIndexOf(findText);
+            }
+        }
+
+        if (foundIndex != -1) {
+            scriptTextArea.requestFocusInWindow();
+            scriptTextArea.select(foundIndex, foundIndex + findText.length());
+        } else {
+            java.awt.Toolkit.getDefaultToolkit().beep(); // Beep if not found
         }
     }
 
