@@ -189,7 +189,6 @@ public class PythonExecutor extends JFrame {
     private JButton recentFoldersBtn;
     private static final int MAX_RECENT_FOLDERS = 5;
 
-
     private UndoManager undoManager;
     private int currentTabSize = 4; // Default Python tab size
 
@@ -3032,7 +3031,9 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * Replaces the currently selected text if it matches the find text, then finds the next occurrence.
+     * Replaces the currently selected text if it matches the find text, then
+     * finds the next occurrence.
+     *
      * @param findText The text to search for.
      * @param replaceText The text to replace with.
      * @param caseSensitive True for case-sensitive search.
@@ -3060,6 +3061,7 @@ public class PythonExecutor extends JFrame {
 
     /**
      * Replaces all occurrences of the find text with the replace text.
+     *
      * @param findText The text to search for.
      * @param replaceText The text to replace with.
      * @param caseSensitive True for case-sensitive search.
@@ -3081,6 +3083,7 @@ public class PythonExecutor extends JFrame {
 
     /**
      * Finds text in the script area.
+     *
      * @param findText The text to search for.
      * @param forward True to search forward, false to search backward.
      * @param caseSensitive True for case-sensitive search.
