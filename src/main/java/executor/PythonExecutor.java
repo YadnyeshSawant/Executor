@@ -55,6 +55,7 @@ import javax.swing.ActionMap;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
@@ -196,6 +197,7 @@ public class PythonExecutor extends JFrame {
     private JTree fileExplorerTree;
     private JPopupMenu explorerContextMenu;
     private JMenuItem editMenuItem;
+    private JMenuItem openFolderMenuItem;
     private JMenuItem renameMenuItem;
     private JMenuItem moveMenuItem;
     private JMenuItem deleteMenuItem;
@@ -482,15 +484,16 @@ public class PythonExecutor extends JFrame {
         scriptTextArea = new RSyntaxTextArea();
         scriptTextArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_PYTHON);
         scriptTextArea.setBackground(new Color(43, 43, 43));
+        scriptTextArea.setSelectionColor(new Color(104, 93, 156, 100)); // Set a semi-transparent selection color
         scriptTextArea.setCurrentLineHighlightColor(new Color(50, 50, 50));
         scriptTextArea.setCodeFoldingEnabled(true);
 
         // Customize syntax highlighting for the dark theme
         SyntaxScheme scheme = scriptTextArea.getSyntaxScheme();
-        scheme.getStyle(Token.RESERVED_WORD).foreground = new Color(204, 120, 50);   // 'def', 'if', 'for', etc.
-        scheme.getStyle(Token.RESERVED_WORD_2).foreground = new Color(204, 120, 50); // 'self', etc.
-        scheme.getStyle(Token.LITERAL_BOOLEAN).foreground = new Color(204, 120, 50); // 'True', 'False'
-        scheme.getStyle(Token.FUNCTION).foreground = new Color(130, 170, 255);      // built-in functions like 'print'
+        scheme.getStyle(Token.RESERVED_WORD).foreground = new Color(180, 142, 173);   // 'def', 'if', 'for', etc. (Subtle Magenta)
+        scheme.getStyle(Token.RESERVED_WORD_2).foreground = new Color(180, 142, 173); // 'self', etc. (Subtle Magenta)
+        scheme.getStyle(Token.LITERAL_BOOLEAN).foreground = new Color(180, 142, 173); // 'True', 'False' (Subtle Magenta)
+        scheme.getStyle(Token.FUNCTION).foreground = new Color(129, 161, 193);      // built-in functions like 'print' (Subtle Blue)
         scriptTextArea.revalidate();
 
         undoManager = new UndoManager();
@@ -548,9 +551,6 @@ public class PythonExecutor extends JFrame {
         });
         JScrollPane outputScrollPane = new JScrollPane(outputTextArea);
 
-        // Initialize GitManager now that outputTextArea exists
-        this.gitManager = new GitManager(this, executorService, outputTextArea::append, scriptDirectory, inputDirectory);
-
         // Status Bar
         RoundedPanel statusBar = new RoundedPanel(10, new Color(50, 50, 50));
         statusBar.setLayout(new BorderLayout());
@@ -592,7 +592,7 @@ public class PythonExecutor extends JFrame {
 
         // --- SPLIT PANES ---
         middleSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scriptPanel, rightPanel);
-        middleSplitPane.setResizeWeight(0.5); // Give script area 80% of the space
+        middleSplitPane.setResizeWeight(1.0); // Give all extra space to the script area
         middleSplitPane.setDividerSize(3); // Make the divider thinner
 
         mainSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, middleSplitPane, outputScrollPane);
@@ -969,6 +969,15 @@ public class PythonExecutor extends JFrame {
         // component hierarchy is established, preventing race conditions with UI
         // component initialization.
         SwingUtilities.invokeLater(this::loadPreferences);
+        
+        // Set the initial divider location after the frame is visible and has a size.
+        SwingUtilities.invokeLater(() -> {
+            int rightPanelWidth = 115; // Reduce the width of control and input panel width
+            middleSplitPane.setDividerLocation(middleSplitPane.getWidth() - rightPanelWidth - middleSplitPane.getDividerSize());
+        });
+
+        // Initialize GitManager after the constructor is done.
+        SwingUtilities.invokeLater(this::updateGitManager);
     }
 
     /**
@@ -1497,6 +1506,7 @@ public class PythonExecutor extends JFrame {
         prefs.remove(PREF_INPUT_DIR);
         prefs.remove(PREF_LAST_SCRIPT);
 
+        // Clear the internal state
         scriptDirectory = null;
         inputDirectory = null;
         scriptFolderPathLabel.setText("");
@@ -1504,6 +1514,9 @@ public class PythonExecutor extends JFrame {
 
         loadPythonScripts(); // This will clear and reset the combo box
         loadInputFiles();    // This will clear and reset the combo box
+
+        // Update GitManager with the now-null paths
+        updateGitManager();
 
         // Also reset the script text area to its initial placeholder state
         scriptTextArea.setForeground(Color.GRAY);
@@ -1570,15 +1583,9 @@ public class PythonExecutor extends JFrame {
                 Object userObject = selectedNode.getUserObject();
                 if (userObject instanceof Path) {
                     Path selectedPath = (Path) userObject;
-                    // Find the path in the combo box and select it
-                    // This will trigger the existing logic to load the script
-                    for (int i = 0; i < scriptFileCombo.getItemCount(); i++) {
-                        Object item = scriptFileCombo.getItemAt(i);
-                        if (selectedPath.equals(item)) {
-                            scriptFileCombo.setSelectedItem(item);
-                            break;
-                        }
-                    }
+                    // Directly set the item in the combo box. If it's not there,
+                    // it will be added, and then selected to trigger loading.
+                    scriptFileCombo.setSelectedItem(selectedPath);
                 }
             }
         });
@@ -1619,14 +1626,9 @@ public class PythonExecutor extends JFrame {
                 Object userObject = selectedNode.getUserObject();
                 if (userObject instanceof Path) {
                     Path selectedPath = (Path) userObject;
-                    // Find the path in the combo box and select it
-                    for (int i = 0; i < inputFileCombo.getItemCount(); i++) {
-                        Object item = inputFileCombo.getItemAt(i);
-                        if (selectedPath.equals(item)) {
-                            inputFileCombo.setSelectedItem(item);
-                            break;
-                        }
-                    }
+                    // Directly set the item in the combo box. If it's not there,
+                    // it will be added, and then selected to trigger loading.
+                    inputFileCombo.setSelectedItem(selectedPath);
                 }
             }
         });
@@ -1745,11 +1747,13 @@ public class PythonExecutor extends JFrame {
      */
     private void createExplorerContextMenu() {
         explorerContextMenu = new JPopupMenu();
+        openFolderMenuItem = new JMenuItem("Open Folder");
         editMenuItem = new JMenuItem("Edit");
         renameMenuItem = new JMenuItem("Rename");
         moveMenuItem = new JMenuItem("Move to...");
         deleteMenuItem = new JMenuItem("Delete");
 
+        openFolderMenuItem.addActionListener(e -> openSelectedFolder());
         editMenuItem.addActionListener(e -> editSelectedFile());
         renameMenuItem.addActionListener(e -> renameSelectedItem());
         moveMenuItem.addActionListener(e -> moveSelectedItem());
@@ -1757,6 +1761,7 @@ public class PythonExecutor extends JFrame {
 
         explorerContextMenu.add(editMenuItem);
         explorerContextMenu.addSeparator();
+        explorerContextMenu.add(openFolderMenuItem);
         explorerContextMenu.add(renameMenuItem);
         explorerContextMenu.add(moveMenuItem);
         explorerContextMenu.add(deleteMenuItem);
@@ -1779,9 +1784,11 @@ public class PythonExecutor extends JFrame {
 
         this.contextMenuPath = (Path) node.getUserObject();
 
+        boolean isDirectory = Files.isDirectory(contextMenuPath);
         boolean isFile = Files.isRegularFile(contextMenuPath);
         editMenuItem.setEnabled(isFile);
-
+        // Only enable "Open Folder" if the selected item is a directory
+        openFolderMenuItem.setEnabled(isDirectory);
         explorerContextMenu.show(tree, e.getX(), e.getY());
     }
 
@@ -1929,6 +1936,34 @@ public class PythonExecutor extends JFrame {
         }
     }
 
+    /**
+     * Handles the "Open Folder" action from the file explorer context menu,
+     * setting the selected directory as the new root for the corresponding explorer.
+     */
+    private void openSelectedFolder() {
+        if (contextMenuPath == null || !Files.isDirectory(contextMenuPath)) {
+            return;
+        }
+
+        // Determine which explorer was clicked by checking if the path is inside the current script or input directory.
+        if (scriptDirectory != null && contextMenuPath.startsWith(scriptDirectory)) {
+            // It's from the script explorer, so set it as the new script directory
+            scriptDirectory = contextMenuPath;
+            scriptFolderPathLabel.setText(scriptDirectory.toString());
+            addRecentFolder(scriptDirectory);
+            updateGitManager();
+            loadPythonScripts();
+            populateFileExplorer();
+        } else if (inputDirectory != null && contextMenuPath.startsWith(inputDirectory)) {
+            // It's from the input explorer, so set it as the new input directory
+            inputDirectory = contextMenuPath;
+            inputFolderPathLabel.setText(inputDirectory.toString());
+            addRecentFolder(inputDirectory);
+            updateGitManager();
+            loadInputFiles();
+            populateInputFileExplorer();
+        }
+    }
     /**
      * A convenience method that refreshes all file explorers and lists.
      */
@@ -2776,8 +2811,8 @@ public class PythonExecutor extends JFrame {
         allScriptFiles.clear();
         scriptFileCombo.addItem("Select a script");
         if (scriptDirectory != null && Files.isDirectory(scriptDirectory)) {
-            try (Stream<Path> paths = Files.list(scriptDirectory)) {
-                allScriptFiles = paths.filter(p -> !Files.isDirectory(p) && p.toString().toLowerCase().endsWith(".py"))
+            try (Stream<Path> paths = Files.walk(scriptDirectory)) {
+                allScriptFiles = paths.filter(p -> Files.isRegularFile(p) && p.toString().toLowerCase().endsWith(".py"))
                         .sorted()
                         .collect(java.util.stream.Collectors.toList());
                 allScriptFiles.forEach(scriptFileCombo::addItem);
@@ -2812,6 +2847,14 @@ public class PythonExecutor extends JFrame {
                 protected void done() {
                     try {
                         String content = get();
+                        // If the selected item is not in the model, add it.
+                        // This happens when selecting a file from a sub-folder in the explorer.
+                        DefaultComboBoxModel<Object> model = (DefaultComboBoxModel<Object>) scriptFileCombo.getModel();
+                        if (model.getIndexOf(scriptPath) == -1) {
+                            model.addElement(scriptPath);
+                            allScriptFiles.add(scriptPath); // Keep the master list consistent
+                        }
+
                         scriptTextArea.setText(content);
                         scriptTextArea.setForeground(Color.WHITE); // Set text color to white
                         scriptTextArea.setEditable(false); // Make non-editable
@@ -2885,8 +2928,8 @@ public class PythonExecutor extends JFrame {
         allInputFiles.clear();
         inputFileCombo.addItem("Select an input file");
         if (inputDirectory != null && Files.isDirectory(inputDirectory)) {
-            try (Stream<Path> paths = Files.list(inputDirectory)) {
-                allInputFiles = paths.filter(p -> !Files.isDirectory(p))
+            try (Stream<Path> paths = Files.walk(inputDirectory)) {
+                allInputFiles = paths.filter(p -> Files.isRegularFile(p) && p.toString().toLowerCase().endsWith(".txt"))
                         .sorted()
                         .collect(java.util.stream.Collectors.toList());
                 allInputFiles.forEach(inputFileCombo::addItem);
@@ -2920,6 +2963,14 @@ public class PythonExecutor extends JFrame {
                 protected void done() {
                     try {
                         String content = get();
+                        // If the selected item is not in the model, add it.
+                        // This happens when selecting a file from a sub-folder in the explorer.
+                        javax.swing.DefaultComboBoxModel<Object> model = (javax.swing.DefaultComboBoxModel<Object>) inputFileCombo.getModel();
+                        if (model.getIndexOf(inputPath) == -1) {
+                            model.addElement(inputPath);
+                            allInputFiles.add(inputPath); // Keep the master list consistent
+                        }
+
                         inputTextArea.setText(content);
                         inputTextArea.setCaretPosition(0);
                         inputTextArea.setEditable(false);
@@ -3172,8 +3223,10 @@ public class PythonExecutor extends JFrame {
                 parentNode.add(dirNode);
                 addInputNodes(dirNode, file); // Recurse
             } else {
-                // Add all files, not just Python scripts
-                parentNode.add(new DefaultMutableTreeNode(file.toPath()));
+                // Only add .txt files to the input explorer
+                if (file.getName().toLowerCase().endsWith(".txt")) {
+                    parentNode.add(new DefaultMutableTreeNode(file.toPath()));
+                }
             }
         }
     }
@@ -3451,6 +3504,7 @@ public class PythonExecutor extends JFrame {
         if (inputDirPath != null) {
             Path path = Path.of(inputDirPath);
             if (Files.isDirectory(path)) {
+                // This was the missing piece. We need to update GitManager after loading.
                 inputDirectory = path;
                 inputFolderPathLabel.setText(inputDirectory.toString());
                 loadInputFiles();
