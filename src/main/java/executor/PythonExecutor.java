@@ -136,6 +136,18 @@ public class PythonExecutor extends JFrame {
      * Preference key for storing the file explorer mode state.
      */
     private static final String PREF_EXPLORER_MODE = "fileExplorerMode";
+    /**
+     * Preference key for storing the editor's font size.
+     */
+    private static final String PREF_FONT_SIZE = "editorFontSize";
+    /**
+     * Preference key for storing the editor's tab size.
+     */
+    private static final String PREF_TAB_SIZE = "editorTabSize";
+    /**
+     * Preference key for storing the visibility state of the Git controls panel.
+     */
+    private static final String PREF_GIT_CONTROLS_VISIBLE = "gitControlsVisible";
 
     /**
      * Placeholder text for the script text area when it's empty.
@@ -166,6 +178,8 @@ public class PythonExecutor extends JFrame {
     private int lastDividerLocation = -1;
     private int lastMiddleDividerLocation = -1;
     private int lastExplorerSplitPaneLocation = -1;
+    private int lastExplorerMainDividerLocation = -1;
+    private boolean isFileExplorerVisible = true;
     private int lastMiddleDividerLocationExplorer = -1;
     private boolean isOutputVisible = true;
     private JButton toggleOutputBtn;
@@ -177,6 +191,7 @@ public class PythonExecutor extends JFrame {
     private RoundedPanel scriptSelectionPanel;
     private JPanel allControlsPanel;
     private JButton hideControlsBtn;
+    private RoundedPanel versionControlPanel;
     private boolean areControlsVisible = true;
     private boolean isInputPanelVisible = true;
     private boolean isFileExplorerMode = false;
@@ -418,7 +433,7 @@ public class PythonExecutor extends JFrame {
         refreshBtn.setPreferredSize(execButtonSize);
         JButton editBtn = new JButton("Edit");
         editBtn.setFocusPainted(false);
-        editBtn.addActionListener(e -> enableEditing());
+        editBtn.addActionListener(e -> toggleEditing());
         editBtn.setPreferredSize(execButtonSize);
         JButton clearOutputBtn = new JButton("Clear Output");
         clearOutputBtn.setFocusPainted(false);
@@ -437,7 +452,7 @@ public class PythonExecutor extends JFrame {
         execControlsPanel.add(toggleOutputBtn);
 
         // Version Control Panel
-        RoundedPanel versionControlPanel = new RoundedPanel(10, new Color(40, 40, 40));
+        versionControlPanel = new RoundedPanel(10, new Color(40, 40, 40));
         versionControlPanel.setBorder(createBoldTitledBorder("Version Control "));
         versionControlPanel.setLayout(new GridLayout(2, 3, 5, 5));
 
@@ -480,25 +495,38 @@ public class PythonExecutor extends JFrame {
         versionControlPanel.add(gitPushBtn);
         versionControlPanel.add(gitLogBtn);
 
+        // --- Font Setup ---
+        // Attempt to load "Fira Code", with fallbacks for a consistent editor experience.
+        Font editorFont = createEditorFont();
+
         // Python Script Text Area
         scriptTextArea = new RSyntaxTextArea();
+        scriptTextArea.setFont(editorFont);
         scriptTextArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_PYTHON);
-        scriptTextArea.setBackground(new Color(43, 43, 43));
+        scriptTextArea.setBackground(new Color(30, 30, 30)); // VS Code "Dark+" background
         scriptTextArea.setSelectionColor(new Color(104, 93, 156, 100)); // Set a semi-transparent selection color
         scriptTextArea.setCurrentLineHighlightColor(new Color(50, 50, 50));
         scriptTextArea.setCodeFoldingEnabled(true);
 
-        // Customize syntax highlighting for the dark theme
+        // Customize syntax highlighting to match VS Code "Dark+" theme
         SyntaxScheme scheme = scriptTextArea.getSyntaxScheme();
-        scheme.getStyle(Token.RESERVED_WORD).foreground = new Color(180, 142, 173);   // 'def', 'if', 'for', etc. (Subtle Magenta)
-        scheme.getStyle(Token.RESERVED_WORD_2).foreground = new Color(180, 142, 173); // 'self', etc. (Subtle Magenta)
-        scheme.getStyle(Token.LITERAL_BOOLEAN).foreground = new Color(180, 142, 173); // 'True', 'False' (Subtle Magenta)
-        scheme.getStyle(Token.FUNCTION).foreground = new Color(129, 161, 193);      // built-in functions like 'print' (Subtle Blue)
+        scheme.getStyle(Token.RESERVED_WORD).foreground = new Color(0xC586C0);   // Keywords (def, if, for): Magenta
+        scheme.getStyle(Token.RESERVED_WORD_2).foreground = new Color(0x569CD6); // Keywords 2 (self, True, False): Blue
+        scheme.getStyle(Token.LITERAL_BOOLEAN).foreground = new Color(0x569CD6); // 'True', 'False': Blue
+        scheme.getStyle(Token.FUNCTION).foreground = new Color(0xDCDCAA);      // Built-in functions (print): Yellow
+        scheme.getStyle(Token.LITERAL_NUMBER_DECIMAL_INT).foreground = new Color(0xB5CEA8); // Numbers: Light Green
+        scheme.getStyle(Token.LITERAL_NUMBER_FLOAT).foreground = new Color(0xB5CEA8);       // Numbers: Light Green
+        scheme.getStyle(Token.LITERAL_NUMBER_HEXADECIMAL).foreground = new Color(0xB5CEA8); // Numbers: Light Green
+        scheme.getStyle(Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = new Color(0xCE9178); // Strings: Orange
+        scheme.getStyle(Token.COMMENT_EOL).foreground = new Color(0x6A9955);                 // Comments: Green
+        scheme.getStyle(Token.IDENTIFIER).foreground = new Color(0x9CDCFE);                  // Variables: Light Blue
+        scheme.getStyle(Token.SEPARATOR).foreground = new Color(0xFFD700);                   // Brackets (), [], {}: Gold/Yellow
+        scheme.getStyle(Token.OPERATOR).foreground = Color.WHITE;                            // Operators +, -, =, *: White
         scriptTextArea.revalidate();
 
         undoManager = new UndoManager();
         scriptTextArea.getDocument().addUndoableEditListener(undoManager);
-        scriptTextArea.setBorder(createBoldTitledBorder("Python Script "));
+        // scriptTextArea.setBorder(createBoldTitledBorder("Python Script "));
         addPlaceholder(scriptTextArea, SCRIPT_PLACEHOLDER);
         scriptTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         scriptTextArea.getInputMap().put(KeyStroke.getKeyStroke("control H"), "none");
@@ -521,6 +549,7 @@ public class PythonExecutor extends JFrame {
 
         // Input Text Area
         inputTextArea = new JTextArea();
+        inputTextArea.setFont(editorFont);
         inputTextArea.setBorder(createBoldTitledBorder("Input Data "));
         inputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         inputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control H"), "none");
@@ -528,6 +557,7 @@ public class PythonExecutor extends JFrame {
 
         // Output Panel
         outputTextArea = new JTextArea();
+        outputTextArea.setFont(editorFont);
         outputTextArea.setEditable(false);
         outputTextArea.getInputMap().put(KeyStroke.getKeyStroke("control J"), "none");
         outputTextArea.setBorder(createBoldTitledBorder("Output "));
@@ -848,15 +878,6 @@ public class PythonExecutor extends JFrame {
             }
         });
 
-        // Shortcut for toggling input panel: Ctrl + I
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK), "toggleInputPanel");
-        actionMap.put("toggleInputPanel", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                toggleInputPanelVisibility();
-            }
-        });
-
         // Shortcut for toggling control panels: Ctrl + H
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK), "toggleControls");
         actionMap.put("toggleControls", new AbstractAction() {
@@ -866,17 +887,26 @@ public class PythonExecutor extends JFrame {
             }
         });
 
+        // Shortcut for toggling input panel: Ctrl + I
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_I, InputEvent.CTRL_DOWN_MASK), "toggleInputPanel");
+        actionMap.put("toggleInputPanel", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                toggleInputPanelVisibility();
+            }
+        });
+
         // Shortcut for enabling the edit mode : Ctrl + e
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK), "enableEditing");
         actionMap.put("enableEditing", new AbstractAction() {
             @Override
-            public void actionPerformed(ActionEvent e) {
-                enableEditing();
+            public void actionPerformed(ActionEvent e) { // Note: This action now toggles editing
+                toggleEditing();
             }
         });
 
-        // Shortcut for Git Bash: Ctrl + Shift + B
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), "openGitBash");
+        // Shortcut for Git Bash: Ctrl + Alt + B
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_DOWN_MASK | InputEvent.ALT_DOWN_MASK), "openGitBash");
         actionMap.put("openGitBash", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -1066,76 +1096,7 @@ public class PythonExecutor extends JFrame {
      */
     private void openSettingsDialog() {
         if (settingsDialog == null) {
-            settingsDialog = new JDialog(this, "Settings", true);
-            settingsDialog.setSize(1000, 700);
-            settingsDialog.setMinimumSize(new Dimension(800, 500));
-            settingsDialog.setLocationRelativeTo(this);
-            // Panels for settings
-            // Use a 5px empty border for some padding around the edges
-            JPanel leftPanel = new JPanel();
-            leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
-
-            // Buttons for the left panel
-            JButton shortcutsButton = new JButton("Shortcuts");
-            JButton themesButton = new JButton("Themes");
-            JButton fontSizeButton = new JButton("Font Size");
-            JButton languageButton = new JButton("Language");
-            JButton generalButton = new JButton("General");
-
-            // Set a uniform height for the buttons and allow them to stretch horizontally
-            Dimension buttonSize = new Dimension(Short.MAX_VALUE, 35);
-            shortcutsButton.setMaximumSize(buttonSize);
-            themesButton.setMaximumSize(buttonSize);
-            fontSizeButton.setMaximumSize(buttonSize);
-            languageButton.setMaximumSize(buttonSize);
-            generalButton.setMaximumSize(buttonSize);
-
-            // Add buttons to the left panel
-            leftPanel.add(shortcutsButton);
-            leftPanel.add(Box.createRigidArea(new Dimension(0, 5))); // Spacer
-            leftPanel.add(themesButton);
-            leftPanel.add(Box.createRigidArea(new Dimension(0, 5))); // Spacer
-            leftPanel.add(fontSizeButton);
-            leftPanel.add(Box.createRigidArea(new Dimension(0, 5))); // Spacer
-            leftPanel.add(languageButton);
-            leftPanel.add(Box.createRigidArea(new Dimension(0, 5))); // Spacer
-            leftPanel.add(generalButton);
-
-            // Panels for settings
-            final CardLayout cardLayout = new CardLayout();
-            final JPanel rightPanel = new JPanel(cardLayout);
-
-            // --- Create the different settings panels ---
-            JPanel shortcutsPanel = createShortcutsPanel();
-            JPanel themesPanel = new JPanel(); // Placeholder
-            themesPanel.add(new JLabel("Theme settings will be comming soon."));
-            JPanel fontPanel = createFontSizePanel();
-            JPanel langPanel = new JPanel(); // Placeholder
-            langPanel.add(new JLabel("Language settings will be comming soon."));
-            JPanel generalPanel = createGeneralSettingsPanel();
-
-            // Add panels to the CardLayout
-            rightPanel.add(shortcutsPanel, "Shortcuts");
-            rightPanel.add(themesPanel, "Themes");
-            rightPanel.add(fontPanel, "Font Size");
-            rightPanel.add(langPanel, "Language");
-            rightPanel.add(generalPanel, "General");
-
-            // Add action listeners to the buttons to switch cards
-            shortcutsButton.addActionListener(e -> cardLayout.show(rightPanel, "Shortcuts"));
-            themesButton.addActionListener(e -> cardLayout.show(rightPanel, "Themes"));
-            fontSizeButton.addActionListener(e -> cardLayout.show(rightPanel, "Font Size"));
-            languageButton.addActionListener(e -> cardLayout.show(rightPanel, "Language"));
-            generalButton.addActionListener(e -> cardLayout.show(rightPanel, "General"));
-
-            JSplitPane settingsSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                    leftPanel, rightPanel);
-            settingsSplitPane.setResizeWeight(0.10);    //buttons pannel width for settings pannel
-
-            settingsDialog.add(settingsSplitPane);
-
-            // Show the shortcuts panel by default when opening settings
-            cardLayout.show(rightPanel, "Shortcuts");
+            settingsDialog = new SettingsDialog(this);
         }
         settingsDialog.setVisible(true);
     }
@@ -1144,202 +1105,11 @@ public class PythonExecutor extends JFrame {
      * Creates the panel that displays a table of all application keyboard
      * shortcuts.
      *
-     * @return A {@link JPanel} containing the shortcuts table.
-     */
-    private JPanel createShortcutsPanel() {
-        final Map<String, String> pendingShortcuts = new HashMap<>();
-
-        String[] columnNames = {"Action", "Shortcut"};
-        // The third column holds the internal action key, which is not visible to the user.
-        final Object[][] actionData = {
-            {"Select Script Folder", "selectScriptFolder"},
-            {"Select Input Folder", "selectInputFolder"},
-            {"Refresh File Lists", "refreshAll"},
-            {"Increase Font Size", "increaseFontSize"},
-            {"Decrease Font Size", "decreaseFontSize"},
-            {"Save Script", "saveScript"},
-            {"Run Script", "runScript"},
-            {"Toggle Output Panel", "toggleOutput"},
-            {"Toggle Control Panels", "toggleControls"},
-            {"Enable Editing", "enableEditing"},
-            {"Toggle Input Panel", "toggleInputPanel"},
-            {"Open Git Bash", "openGitBash"},
-            {"Undo", "undo"},
-            {"Redo", "redo"},
-            {"Git Add", "gitAdd"},
-            {"Git Commit", "gitCommit"},
-            {"Git Pull", "gitPull"},
-            {"Git Push", "gitPush"},
-            {"Git Log", "gitLog"},
-            {"Toggle Settings Panel", "toggleSettings"}
-        };
-
-        DefaultTableModel model = new DefaultTableModel(new Object[][]{}, columnNames) {
-            public boolean isCellEditable(int row, int column) {
-                return false; // Cells are not directly editable; editing is done via double-click.
-            }
-        };
-
-        for (Object[] action : actionData) {
-            model.addRow(new Object[]{action[0], getShortcutStringForAction((String) action[1])});
-        }
-
-        JTable shortcutsTable = new JTable(model);
-        shortcutsTable.setFillsViewportHeight(true);
-        shortcutsTable.setFont(new Font("SansSerif", Font.PLAIN, 16));
-        shortcutsTable.setRowHeight(shortcutsTable.getRowHeight() + 10);
-        shortcutsTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 16));
-
-        // Set column widths
-        shortcutsTable.getColumnModel().getColumn(0).setPreferredWidth(250);
-        shortcutsTable.getColumnModel().getColumn(1).setPreferredWidth(250);
-
-        JScrollPane scrollPane = new JScrollPane(shortcutsTable);
-
-        JPanel panel = new JPanel(new BorderLayout(0, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        panel.add(scrollPane, BorderLayout.CENTER);
-        // return panel;
-
-        // --- Bottom Panel for Save button ---
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton saveChangesButton = new JButton("Save Changes");
-        saveChangesButton.setEnabled(false); // Initially disabled
-        bottomPanel.add(saveChangesButton);
-
-        // // Add a mouse listener to handle double-click editing on the shortcut column
-        // shortcutsTable.addMouseListener(new MouseAdapter() {
-        //     public void mouseClicked(MouseEvent e) {
-        //         if (e.getClickCount() == 2) { // Check for double-click
-        //             int row = shortcutsTable.rowAtPoint(e.getPoint());
-        //             int col = shortcutsTable.columnAtPoint(e.getPoint());
-        //             if (row >= 0 && col == 1) { // Clicked on the "Shortcut" column
-        //                 String actionKey = (String) actionData[row][1];
-        //                 String currentShortcut = (String) model.getValueAt(row, 1);
-        //                 String newShortcut = JOptionPane.showInputDialog(
-        //                         panel, "Enter new shortcut for \"" + model.getValueAt(row, 0) + "\":\n(e.g., Ctrl + S / Shift + Enter)", currentShortcut);
-        //                 if (newShortcut != null && !newShortcut.trim().isEmpty()) {
-        //                     model.setValueAt(newShortcut, row, 1);
-        //                     pendingShortcuts.put(actionKey, newShortcut);
-        //                     saveChangesButton.setEnabled(true);
-        //                 }
-        //             }
-        //         }
-        //     }
-        // });
-        // saveChangesButton.addActionListener(e -> {
-        //     for (Map.Entry<String, String> entry : pendingShortcuts.entrySet()) {
-        //         updateShortcut(entry.getKey(), entry.getValue());
-        //     }
-        //     pendingShortcuts.clear();
-        //     saveChangesButton.setEnabled(false);
-        //     JOptionPane.showMessageDialog(panel, "Shortcuts have been updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
-        // });
-        // panel.add(bottomPanel, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    /**
-     * Updates the keyboard shortcut for a specific action. It removes the old
-     * KeyStroke and adds the new one to the component's InputMap.
-     *
-     * @param actionMapKey The key identifying the action in the ActionMap.
-     * @param newShortcutString The new shortcut in a human-readable format
-     * (e.g., "Ctrl + S").
-     */
-    private void updateShortcut(String actionMapKey, String newShortcutString) {
-        InputMap inputMap = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        ActionMap actionMap = getRootPane().getActionMap();
-        Action action = actionMap.get(actionMapKey);
-
-        if (action == null) {
-            System.err.println("Warning: No action found for key: " + actionMapKey);
-            return;
-        }
-
-        // 1. Remove all old KeyStrokes associated with this action
-        List<KeyStroke> toRemove = new ArrayList<>();
-        for (KeyStroke oldKs : inputMap.keys()) {
-            if (actionMapKey.equals(inputMap.get(oldKs))) {
-                toRemove.add(oldKs);
-            }
-        }
-        toRemove.forEach(inputMap::remove);
-
-        // 2. Parse and add the new KeyStroke(s)
-        String[] shortcutParts = newShortcutString.split("/");
-        for (String part : shortcutParts) {
-            String formattedPart = part.trim().replaceAll("\\s*\\+\\s*", " ");
-            KeyStroke newKs = KeyStroke.getKeyStroke(formattedPart.toUpperCase());
-
-            if (newKs != null) {
-                inputMap.put(newKs, actionMapKey);
-            } else {
-                JOptionPane.showMessageDialog(settingsDialog,
-                        "Invalid shortcut format: '" + part.trim() + "'. The change was not applied.",
-                        "Invalid Shortcut", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
-    /**
-     * Finds all KeyStrokes associated with a given action key and formats them
-     * into a user-friendly string.
-     *
-     * @param actionMapKey The key for the action in the ActionMap (e.g.,
-     * "saveScript").
-     * @return A string representing the shortcuts (e.g., "Ctrl + S").
-     */
-    private String getShortcutStringForAction(String actionMapKey) {
-        InputMap inputMap = getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        List<String> shortcuts = new ArrayList<>();
-        KeyStroke[] keyStrokes = inputMap.keys();
-
-        if (keyStrokes != null) {
-            for (KeyStroke ks : keyStrokes) {
-                if (actionMapKey.equals(inputMap.get(ks))) {
-                    shortcuts.add(keyStrokeToString(ks));
-                }
-            }
-        }
-        return String.join(" / ", shortcuts);
-    }
-
-    /**
-     * Converts a KeyStroke object into a human-readable string format.
-     *
-     * @param ks The KeyStroke to format.
-     * @return A formatted string (e.g., "Ctrl + Shift + S").
-     */
-    private String keyStrokeToString(KeyStroke ks) {
-        if (ks == null) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        int modifiers = ks.getModifiers();
-
-        if ((modifiers & InputEvent.CTRL_DOWN_MASK) != 0) {
-            sb.append("Ctrl + ");
-        }
-        if ((modifiers & InputEvent.ALT_DOWN_MASK) != 0) {
-            sb.append("Alt + ");
-        }
-        if ((modifiers & InputEvent.SHIFT_DOWN_MASK) != 0) {
-            sb.append("Shift + ");
-        }
-
-        // Use KeyEvent.getKeyText() for a user-friendly name of the key
-        sb.append(KeyEvent.getKeyText(ks.getKeyCode()));
-
-        return sb.toString();
-    }
-
-    /**
      * Sets the tab size (number of spaces) for the script and input text areas.
      *
      * @param size The number of spaces to use for a tab.
      */
-    private void setTabSize(int size) {
+    public void setTabSize(int size) {
         if (size < 1) {
             size = 1;
         }
@@ -1355,152 +1125,20 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * Creates the panel for adjusting editor font and tab sizes within the
-     * settings dialog.
-     *
-     * @return A {@link JPanel} containing font and tab size controls and a
-     * preview area.
+     * Toggles the visibility of the Git version control panel.
      */
-    private JPanel createFontSizePanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 5, 10, 5);
-        gbc.anchor = GridBagConstraints.WEST;
-
-        // --- Font Size Slider ---
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Editor Font Size:"), gbc);
-
-        // Use the scriptTextArea's current font size as the initial value
-        int initialSize = scriptTextArea.getFont().getSize();
-        JSlider fontSizeSlider = new JSlider(8, 48, initialSize);
-        JLabel currentSizeLabel = new JLabel(String.valueOf(initialSize));
-        currentSizeLabel.setFont(currentSizeLabel.getFont().deriveFont(Font.BOLD));
-        currentSizeLabel.setPreferredSize(new Dimension(30, 30)); // Give it a fixed width
-        currentSizeLabel.setHorizontalAlignment(JLabel.CENTER);
-
-        // --- Preview Area ---
-        JTextArea previewArea = new JTextArea(
-                "# This is a preview of the editor settings.\n"
-                + "def example_function():\n"
-                + "\t# Press Tab to see the new size.\n"
-                + "\tprint(\"Hello, World!\")"
-        );
-        previewArea.setFont(scriptTextArea.getFont()); // Start with current font
-        previewArea.setEditable(false);
-        previewArea.setOpaque(true);
-        previewArea.setBackground(scriptTextArea.getBackground());
-        previewArea.setForeground(scriptTextArea.getForeground());
-        previewArea.setBorder(createBoldTitledBorder("Preview"));
-
-        // --- Listeners ---
-        fontSizeSlider.addChangeListener(e -> {
-            int newSize = fontSizeSlider.getValue();
-            setFontSize(newSize);
-            currentSizeLabel.setText(String.valueOf(newSize));
-            previewArea.setFont(previewArea.getFont().deriveFont((float) newSize));
-        });
-
-        // --- Layout: Font Size ---
-        gbc.gridx = 1;
-        gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(fontSizeSlider, gbc);
-
-        gbc.gridx = 2;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        panel.add(currentSizeLabel, gbc);
-
-        // --- Layout: Tab Size ---
-        gbc.gridy = 1;
-        gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Tab Size (Indentations):"), gbc);
-
-        SpinnerNumberModel tabSizeModel = new SpinnerNumberModel(currentTabSize, 1, 16, 1);
-        JSpinner tabSizeSpinner = new JSpinner(tabSizeModel);
-        // Set a preferred size to prevent it from being too wide
-        tabSizeSpinner.setPreferredSize(new Dimension(10, tabSizeSpinner.getPreferredSize().height));
-
-        tabSizeSpinner.addChangeListener(e -> {
-            int newTabSize = (Integer) tabSizeSpinner.getValue();
-            setTabSize(newTabSize);
-            previewArea.setTabSize(newTabSize);
-        });
-
-        gbc.gridx = 1;
-        gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(tabSizeSpinner, gbc);
-
-        // --- Layout: Preview Area ---
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 3; // Span across the first 3 columns
-        gbc.weighty = 1.0;
-        gbc.fill = GridBagConstraints.BOTH;
-        panel.add(new JScrollPane(previewArea), gbc);
-
-        return panel;
-    }
-
-    /**
-     * Creates the "General" settings panel, which includes options like
-     * resetting folder paths and toggling UI modes.
-     *
-     * @return A {@link JPanel} containing general application settings.
-     */
-    private JPanel createGeneralSettingsPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 15));
-        panel.setBorder(createBoldTitledBorder("General Settings"));
-
-        JButton resetFoldersBtn = new JButton("Reset Folder Selections");
-        resetFoldersBtn.setToolTipText("Clears the selected script and input folders and removes them from preferences.");
-        resetFoldersBtn.addActionListener(e -> {
-            int choice = JOptionPane.showConfirmDialog(
-                    settingsDialog,
-                    "Are you sure you want to reset all saved folder paths?\nThis will clear your current script and input folder selections.",
-                    "Confirm Reset",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
-            );
-
-            if (choice == JOptionPane.YES_OPTION) {
-                resetFolderSelections();
-                JOptionPane.showMessageDialog(settingsDialog, "Folder selections have been reset.", "Reset Complete", JOptionPane.INFORMATION_MESSAGE);
-            }
-        });
-
-        toggleFileExplorerModeBtn = new JButton("Toggle File Explorer mode");
-        toggleFileExplorerModeBtn.setToolTipText("Toggles the file explorer mode.");
-        toggleFileExplorerModeBtn.addActionListener(e -> toggleFileExplorerMode());
-
-        JButton toggleExamModeBtn = new JButton("Toggle Exam Mode");
-        toggleExamModeBtn.setToolTipText("Toggles a simplified UI for exam environments.");
-        // toggleExamModeBtn.addActionListener(e -> toggleExamMode()); // Action to be implemented
-
-        // Increase button height and add to panel
-        for (JButton btn : Arrays.asList(resetFoldersBtn, toggleFileExplorerModeBtn, toggleExamModeBtn)) {
-            Dimension size = btn.getPreferredSize();
-            size.height += 7;
-            btn.setPreferredSize(size);
-            panel.add(btn);
+    public void toggleGitControlsVisibility() {
+        areGitControlsVisible = !areGitControlsVisible;
+        if (versionControlPanel != null) {
+            versionControlPanel.setVisible(areGitControlsVisible);
         }
-
-        return panel;
     }
 
     /**
      * Resets the application's saved script and input folder selections,
      * clearing them from the UI and user preferences.
      */
-    private void resetFolderSelections() {
+    public void resetFolderSelections() {
         Preferences prefs = Preferences.userNodeForPackage(PythonExecutor.class);
         prefs.remove(PREF_SCRIPT_DIR);
         prefs.remove(PREF_INPUT_DIR);
@@ -2192,7 +1830,7 @@ public class PythonExecutor extends JFrame {
      *
      * @param newSize The new font size.
      */
-    private void setFontSize(float newSize) {
+    public void setFontSize(float newSize) {
         // Prevent font from becoming too small or too large
         if (newSize < 8) {
             newSize = 8;
@@ -2319,7 +1957,7 @@ public class PythonExecutor extends JFrame {
      * @param title The title for the border.
      * @return A {@link TitledBorder} with custom styling.
      */
-    private TitledBorder createBoldTitledBorder(String title) {
+    TitledBorder createBoldTitledBorder(String title) {
         TitledBorder border = BorderFactory.createTitledBorder(title);
         Font currentFont = border.getTitleFont();
         border.setTitleFont(currentFont.deriveFont(Font.BOLD, currentFont.getSize() + 4f));
@@ -2329,7 +1967,7 @@ public class PythonExecutor extends JFrame {
     /**
      * Toggles the UI between "File Explorer" mode and "Classic" mode.
      */
-    private void toggleFileExplorerMode() {
+    public void toggleFileExplorerMode() {
         setFileExplorerMode(!this.isFileExplorerMode);
     }
 
@@ -2363,10 +2001,6 @@ public class PythonExecutor extends JFrame {
 
         if (isFileExplorerMode) {
             // Entering File Explorer Mode
-            if (toggleFileExplorerModeBtn != null) {
-                toggleFileExplorerModeBtn.setText("Toggle Classic Mode");
-            }
-
             // Remove the file selection panel to expand the script editor
             scriptPanel.remove(scriptSelectionPanel);
 
@@ -2392,10 +2026,6 @@ public class PythonExecutor extends JFrame {
             }
         } else {
             // Exiting File Explorer Mode
-            if (toggleFileExplorerModeBtn != null) {
-                toggleFileExplorerModeBtn.setText("Toggle File Explorer mode");
-            }
-
             // Add the file selection panel back to its original position
             scriptPanel.add(scriptSelectionPanel, BorderLayout.NORTH);
 
@@ -2410,10 +2040,65 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
+     * Creates the font for the editor text areas, attempting to use a preferred
+     * font ("Fira Code") and falling back to common monospaced fonts if it's not
+     * available.
+     *
+     * @return The created {@link Font} object.
+     */
+    private Font createEditorFont() {
+        final String preferredFontName = "Fira Code";
+        final String fallbackFontName = "Consolas";
+        final String genericFontName = "Monospaced";
+        final int defaultFontSize = 14;
+
+        // Check if "Fira Code" is available
+        Font preferredFont = new Font(preferredFontName, Font.PLAIN, defaultFontSize);
+        if (preferredFont.getFamily().equals(preferredFontName)) {
+            return preferredFont; // "Fira Code" is available
+        }
+
+        // If not, check for "Consolas"
+        Font fallbackFont = new Font(fallbackFontName, Font.PLAIN, defaultFontSize);
+        if (fallbackFont.getFamily().equals(fallbackFontName)) {
+            return fallbackFont; // "Consolas" is available
+        }
+
+        // Otherwise, use the generic "Monospaced" font
+        return new Font(genericFontName, Font.PLAIN, defaultFontSize);
+    }
+
+    /**
+     * Toggles the visibility of the left-hand file explorer panel when in File
+     * Explorer mode.
+     */
+    private void toggleFileExplorerVisibility() {
+        if (!isFileExplorerMode) {
+            // This action is only relevant in file explorer mode.
+            return;
+        }
+
+        if (isFileExplorerVisible) {
+            lastExplorerMainDividerLocation = explorerSplitPane.getDividerLocation();
+            // Set divider to 0 to collapse the left component
+            explorerSplitPane.setDividerLocation(0);
+            isFileExplorerVisible = false;
+        } else {
+            if (lastExplorerMainDividerLocation != -1) {
+                explorerSplitPane.setDividerLocation(lastExplorerMainDividerLocation);
+            } else {
+                // Fallback to a default width if no previous location is stored
+                explorerSplitPane.setDividerLocation(250);
+            }
+            isFileExplorerVisible = true;
+        }
+    }
+
+    /**
      * Toggles the visibility of the right-hand panel containing the input text
      * area and controls.
      */
-    private void toggleInputPanelVisibility() {
+    public void toggleInputPanelVisibility() {
         if (isInputPanelVisible) {
             lastMiddleDividerLocation = middleSplitPane.getDividerLocation();
             middleSplitPane.setDividerLocation(1.0); // Hide right component
@@ -2432,7 +2117,7 @@ public class PythonExecutor extends JFrame {
     /**
      * Toggles the visibility of the bottom output panel.
      */
-    private void toggleOutputVisibility() {
+    public void toggleOutputVisibility() {
         if (isOutputVisible) {
             lastDividerLocation = mainSplitPane.getDividerLocation();
             mainSplitPane.setDividerLocation(1.0); // Hide by moving divider to the bottom
@@ -2617,7 +2302,7 @@ public class PythonExecutor extends JFrame {
      * from their respective directories, attempting to preserve the current
      * selection.
      */
-    private void refreshAll() {
+    public void refreshAll() {
         // Store the current selections
         Object selectedScript = scriptFileCombo.getSelectedItem();
         Object selectedInput = inputFileCombo.getSelectedItem();
@@ -2728,19 +2413,33 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * Enables editing on the script text area if it is currently read-only.
+     * Toggles the editable state of the script text area.
+     */
+    private void toggleEditing() {
+        boolean isCurrentlyEditable = scriptTextArea.isEditable();
+        scriptTextArea.setEditable(!isCurrentlyEditable);
+
+        String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
+        Object selectedScript = scriptFileCombo.getSelectedItem();
+        String scriptName = (selectedScript instanceof Path) ? ((Path) selectedScript).getFileName().toString() : "current script";
+
+        if (!isCurrentlyEditable) {
+            outputTextArea.append(String.format("\n[%s] Editing enabled for %s.", timestamp, scriptName));
+        } else {
+            outputTextArea.append(String.format("\n[%s] Editing disabled for %s.", timestamp, scriptName));
+        }
+        scriptTextArea.requestFocusInWindow();
+    }
+
+    /**
+     * Ensures editing is enabled on the script text area. If it's already
+     * editable, it just requests focus.
      */
     private void enableEditing() {
         if (!scriptTextArea.isEditable()) {
-            scriptTextArea.setEditable(true);
-            String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
-            Object selectedScript = scriptFileCombo.getSelectedItem();
-            String scriptName = (selectedScript instanceof Path) ? ((Path) selectedScript).getFileName().toString() : "current script";
-            outputTextArea.append(String.format("\n[%s] Editing enabled for %s.", timestamp, scriptName));
-            scriptTextArea.requestFocusInWindow();
-        } else {
-            scriptTextArea.requestFocusInWindow();
+            toggleEditing(); // Use the toggle method to enable it
         }
+        scriptTextArea.requestFocusInWindow();
     }
 
     /**
@@ -2765,7 +2464,7 @@ public class PythonExecutor extends JFrame {
      * @param path The {@link Path} to check for.
      * @return True if the path exists in the combo box, false otherwise.
      */
-    private boolean isPathInComboBox(Path path) {
+    public boolean isPathInComboBox(Path path) {
         for (int i = 0; i < scriptFileCombo.getItemCount(); i++) {
             Object item = scriptFileCombo.getItemAt(i);
             if (item instanceof Path && item.equals(path)) {
@@ -3472,6 +3171,15 @@ public class PythonExecutor extends JFrame {
 
         // Save the file explorer mode
         prefs.putBoolean(PREF_EXPLORER_MODE, isFileExplorerMode);
+
+        // Save font size
+        prefs.putInt(PREF_FONT_SIZE, scriptTextArea.getFont().getSize());
+
+        // Save tab size
+        prefs.putInt(PREF_TAB_SIZE, currentTabSize);
+
+        // Save Git controls visibility
+        prefs.putBoolean(PREF_GIT_CONTROLS_VISIBLE, areGitControlsVisible);
     }
 
     /**
@@ -3480,6 +3188,18 @@ public class PythonExecutor extends JFrame {
      */
     private void loadPreferences() {
         Preferences prefs = Preferences.userNodeForPackage(PythonExecutor.class);
+
+        // Load and apply font size
+        int fontSize = prefs.getInt(PREF_FONT_SIZE, 14); // Default to 14 if not found
+        setFontSize(fontSize);
+
+        // Load and apply tab size
+        int tabSize = prefs.getInt(PREF_TAB_SIZE, 4); // Default to 4 if not found
+        setTabSize(tabSize);
+
+        // Load and apply Git controls visibility
+        areGitControlsVisible = prefs.getBoolean(PREF_GIT_CONTROLS_VISIBLE, true); // Default to true
+        versionControlPanel.setVisible(areGitControlsVisible);
 
         // Load recent folders
         String recentFoldersString = prefs.get(PREF_RECENT_FOLDERS, "");
@@ -3534,6 +3254,45 @@ public class PythonExecutor extends JFrame {
             setFileExplorerMode(true);
         }
     }
+
+    // --- Getters for SettingsDialog ---
+    public RSyntaxTextArea getScriptTextArea() {
+        return scriptTextArea;
+    }
+
+    public int getCurrentTabSize() {
+        return currentTabSize;
+    }
+
+    public boolean isExplorerMode() {
+        return isFileExplorerMode;
+    }
+
+    private boolean areGitControlsVisible = true;
+
+    public boolean areGitControlsVisible() {
+        return areGitControlsVisible;
+    }
+
+    public void setAreGitControlsVisible(boolean visible) {
+        this.areGitControlsVisible = visible;
+    }
+
+    /**
+     * Reloads the application window by saving preferences, disposing the current
+     * frame, and launching a new instance.
+     */
+    public void reloadWindow() {
+        // Ensure all background tasks are stopped.
+        executorService.shutdownNow();
+        // Save all current settings.
+        savePreferences();
+        // Close the current window.
+        dispose();
+        // Start a new application instance on the Event Dispatch Thread.
+        SwingUtilities.invokeLater(() -> PythonExecutor.main(new String[0]));
+    }
+    // --- End Getters ---
 
     /**
      * A container for the loading screen components to allow them to be updated
@@ -3604,6 +3363,7 @@ public class PythonExecutor extends JFrame {
         progressBar.setStringPainted(false); // Do not show percentage on the bar itself
         progressBar.setPreferredSize(new Dimension(350, 5)); // Make it slim
         progressBar.setForeground(new Color(16, 185, 129)); // A nice, modern green
+        progressBar.setUI(new javax.swing.plaf.basic.BasicProgressBarUI()); // Force custom color
         progressBar.setBackground(new Color(60, 60, 60));
         progressBar.setBorder(BorderFactory.createLineBorder(new Color(80, 80, 80)));
         gbc.insets = new Insets(5, 5, 5, 5);
