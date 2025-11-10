@@ -40,7 +40,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -50,7 +49,6 @@ import java.util.prefs.Preferences;
 import java.util.stream.Stream;
 
 import javax.swing.AbstractAction;
-import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -76,17 +74,13 @@ import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRootPane;
 import javax.swing.JScrollPane;
-import javax.swing.JSlider;
-import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
-import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListCellRenderer;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
@@ -95,7 +89,6 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.table.DefaultTableModel;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.View;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -148,6 +141,10 @@ public class PythonExecutor extends JFrame {
      * Preference key for storing the visibility state of the Git controls panel.
      */
     private static final String PREF_GIT_CONTROLS_VISIBLE = "gitControlsVisible";
+    /**
+     * Preference key for storing the last used problem statements directory path.
+     */
+    private static final String PREF_PROBLEM_DIR = "problemDirectory";
 
     /**
      * Placeholder text for the script text area when it's empty.
@@ -173,6 +170,7 @@ public class PythonExecutor extends JFrame {
     private JLabel inputFolderPathLabel;
     private Path scriptDirectory;
     private Path inputDirectory;
+    private Path problemDirectory;
     private List<Path> allScriptFiles = new ArrayList<>();
     private List<Path> allInputFiles = new ArrayList<>();
     private int lastDividerLocation = -1;
@@ -3123,7 +3121,7 @@ public class PythonExecutor extends JFrame {
      *
      * @param folder The {@link Path} of the folder to add.
      */
-    private void addRecentFolder(Path folder) {
+    void addRecentFolder(Path folder) {
         if (folder == null) {
             return;
         }
@@ -3180,6 +3178,13 @@ public class PythonExecutor extends JFrame {
 
         // Save Git controls visibility
         prefs.putBoolean(PREF_GIT_CONTROLS_VISIBLE, areGitControlsVisible);
+
+        // Save problem directory
+        if (problemDirectory != null) {
+            prefs.put(PREF_PROBLEM_DIR, problemDirectory.toAbsolutePath().toString());
+        } else {
+            prefs.remove(PREF_PROBLEM_DIR);
+        }
     }
 
     /**
@@ -3248,6 +3253,14 @@ public class PythonExecutor extends JFrame {
             }
         }
 
+        String problemDirPath = prefs.get(PREF_PROBLEM_DIR, null);
+        if (problemDirPath != null) {
+            Path path = Path.of(problemDirPath);
+            if (Files.isDirectory(path)) {
+                problemDirectory = path;
+            }
+        }
+
         // Load and apply the file explorer mode preference
         boolean startInExplorerMode = prefs.getBoolean(PREF_EXPLORER_MODE, false); // Default to classic mode
         if (startInExplorerMode) {
@@ -3258,6 +3271,22 @@ public class PythonExecutor extends JFrame {
     // --- Getters for SettingsDialog ---
     public RSyntaxTextArea getScriptTextArea() {
         return scriptTextArea;
+    }
+
+    public Path getInputDirectory() {
+        return inputDirectory;
+    }
+
+    public Path getProblemDirectory() {
+        return problemDirectory;
+    }
+
+    public void setProblemDirectory(Path problemDirectory) {
+        this.problemDirectory = problemDirectory;
+    }
+
+    JComboBox<Object> getScriptFileCombo() {
+        return scriptFileCombo;
     }
 
     public int getCurrentTabSize() {

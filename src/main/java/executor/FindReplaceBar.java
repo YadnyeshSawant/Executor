@@ -2,9 +2,9 @@ package executor;
 
 import java.awt.Color;
 import java.awt.FlowLayout;
-import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -18,6 +18,7 @@ import javax.swing.text.JTextComponent;
  */
 public class FindReplaceBar extends JPanel {
 
+    /** The text component (e.g., JTextArea) this bar operates on. */
     private final JTextComponent textComponent;
     private final JTextField findField;
     private final JTextField replaceField;
@@ -79,13 +80,19 @@ public class FindReplaceBar extends JPanel {
         setVisible(false); // Initially hidden
     }
 
+    /**
+     * Applies basic styling to a button to fit the bar's aesthetic.
+     * @param button The JButton to style.
+     */
     private void styleButton(JButton button) {
         button.setFocusPainted(false);
         button.setMargin(new java.awt.Insets(2, 5, 2, 5));
     }
 
     /**
-     * Makes the find bar visible and requests focus for the find field.
+     * Makes the find/replace bar visible, requests focus for the find field,
+     * and selects any existing text in it. This is the primary method to
+     * show and prepare the bar for user input.
      */
     public void activate() {
         setVisible(true);
@@ -95,6 +102,7 @@ public class FindReplaceBar extends JPanel {
 
     /**
      * Finds the next or previous occurrence of the text in the find field.
+     * The search wraps around the document if the end or beginning is reached.
      *
      * @param forward true to search forward, false to search backward.
      */
@@ -137,7 +145,10 @@ public class FindReplaceBar extends JPanel {
     }
 
     /**
-     * Replaces the currently selected text with the text from the replace field.
+     * Replaces the currently selected text with the text from the replace field,
+     * but only if the selection matches the current find text. After a successful
+     * replacement, it automatically finds the next occurrence of the find text.
+     * If no text is selected, it simply performs a "find next" operation.
      */
     private void replace() {
         String selectedText = textComponent.getSelectedText();

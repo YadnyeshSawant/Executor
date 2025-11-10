@@ -2,6 +2,7 @@ package executor;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -10,8 +11,12 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Map;
+import java.util.stream.Stream;
+
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -19,6 +24,7 @@ import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -31,6 +37,7 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 
 /**
  * A dialog window for managing application settings.
@@ -339,11 +346,14 @@ public class SettingsDialog extends JDialog {
             }
         });
 
+        JButton loadQuestionBtn = new JButton("Load Question");
+        loadQuestionBtn.setToolTipText("Loads a question from a specified source.");
+        loadQuestionBtn.addActionListener(e -> showLoadQuestionDialog());
+
         JButton toggleExamModeBtn = new JButton("Toggle Exam Mode");
         toggleExamModeBtn.setToolTipText("Toggles a simplified UI for exam environments.");
-
         // Set a consistent height for all buttons in this panel
-        for (JButton btn : Arrays.asList(resetFoldersBtn, toggleFileExplorerModeBtn, reloadWindowBtn, toggleExamModeBtn)) {
+        for (JButton btn : Arrays.asList(resetFoldersBtn, toggleFileExplorerModeBtn, reloadWindowBtn, loadQuestionBtn, toggleExamModeBtn)) {
             Dimension size = btn.getPreferredSize();
             size.height += 7;
             btn.setPreferredSize(size);
@@ -359,5 +369,134 @@ public class SettingsDialog extends JDialog {
         panel.add(toggleGitControlsBtn);
 
         return panel;
+    }
+
+    /**
+     * Creates and displays a dialog for loading and viewing problem statements from text files.
+     */
+    private void showLoadQuestionDialog() {
+        JDialog dialog = new JDialog(this, "Load Problem Statements", true);
+        dialog.setSize(800, 600);
+        dialog.setLocationRelativeTo(this);
+
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Table to display problem statements
+        String[] columnNames = {"Problem Title", "Statement"};
+        DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // Make cells non-editable
+            }
+        };
+        JTable problemsTable = new JTable(tableModel);
+        problemsTable.setRowHeight(30);
+        problemsTable.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        problemsTable.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 16));
+        problemsTable.getColumnModel().getColumn(0).setPreferredWidth(200);
+        problemsTable.getColumnModel().getColumn(1).setPreferredWidth(600);
+
+        // Make the "Statement" column wrap text
+        problemsTable.getColumnModel().getColumn(1).setCellRenderer(new MultiLineCellRenderer());
+
+        JScrollPane scrollPane = new JScrollPane(problemsTable);
+
+        // Button to select a folder
+        JButton selectFolderBtn = new JButton("Select Folder with Problems...");
+        selectFolderBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            Path currentProblemDir = executor.getProblemDirectory();
+            if (currentProblemDir != null && Files.isDirectory(currentProblemDir)) {
+                chooser.setCurrentDirectory(currentProblemDir.toFile());
+            }
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            chooser.setDialogTitle("Select Problem Statements Folder");
+
+            int result = chooser.showOpenDialog(dialog);
+            if (result == JFileChooser.APPROVE_OPTION) {
+                Path selectedFolder = chooser.getSelectedFile().toPath();
+                executor.setProblemDirectory(selectedFolder);
+                loadProblemsFromFolder(selectedFolder, tableModel, problemsTable);
+            }
+        });
+
+        // Automatically load problems from the last used folder, if it exists.
+        Path lastProblemDir = executor.getProblemDirectory();
+        if (lastProblemDir != null && Files.isDirectory(lastProblemDir)) {
+            loadProblemsFromFolder(lastProblemDir, tableModel, problemsTable);
+        }
+
+        mainPanel.add(selectFolderBtn, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        dialog.add(mainPanel);
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Loads problem statements from .txt files in a given folder into a table.
+     * @param folder The folder to read from.
+     * @param model The table model to populate.
+     * @param table The table to adjust row heights for.
+     */
+    private void loadProblemsFromFolder(Path folder, DefaultTableModel model, JTable table) {
+        model.setRowCount(0); // Clear existing problems
+
+        try (Stream<Path> paths = Files.walk(folder)) {
+            paths.filter(p -> Files.isRegularFile(p) && p.toString().toLowerCase().endsWith(".txt"))
+                 .forEach(filePath -> {
+                     try {
+                         String title = filePath.getFileName().toString().replace(".txt", "");
+                         String content = Files.readString(filePath);
+                         model.addRow(new Object[]{title, content});
+                     } catch (IOException ex) {
+                         System.err.println("Failed to read file: " + filePath);
+                     }
+                 });
+            
+            // Adjust row heights to fit the content of the multi-line renderer
+            for (int row = 0; row < table.getRowCount(); row++) {
+                TableCellRenderer renderer = table.getCellRenderer(row, 1);
+                Component comp = table.prepareRenderer(renderer, row, 1);
+                int height = comp.getPreferredSize().height;
+                if (table.getRowHeight(row) != height) {
+                    table.setRowHeight(row, height);
+                }
+            }
+
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Error reading folder: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * A custom TableCellRenderer that uses a JTextArea to display multi-line text.
+     */
+    private static class MultiLineCellRenderer extends JTextArea implements TableCellRenderer {
+        public MultiLineCellRenderer() {
+            setLineWrap(true);
+            setWrapStyleWord(true);
+            setOpaque(true);
+            setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); // Add some padding
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            setText((value == null) ? "" : value.toString());
+            setSize(table.getColumnModel().getColumn(column).getWidth(), getPreferredSize().height);
+            if (table.getRowHeight(row) != getPreferredSize().height) {
+                table.setRowHeight(row, getPreferredSize().height);
+            }
+
+            if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                setForeground(table.getSelectionForeground());
+            } else {
+                setBackground(table.getBackground());
+                setForeground(table.getForeground());
+            }
+            return this;
+        }
     }
 }
