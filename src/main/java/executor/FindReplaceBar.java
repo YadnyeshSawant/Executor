@@ -20,10 +20,19 @@ public class FindReplaceBar extends JPanel {
 
     /** The text component (e.g., JTextArea) this bar operates on. */
     private final JTextComponent textComponent;
+    /** The text field for entering the search term. */
     private final JTextField findField;
+    /** The text field for entering the replacement text. */
     private final JTextField replaceField;
+    /** The checkbox to toggle case-sensitive searching. */
     private final JCheckBox caseSensitiveCheckBox;
 
+    /**
+     * Constructs a new FindReplaceBar.
+     *
+     * @param textComponent The text component (e.g., JTextArea, RSyntaxTextArea)
+     *                      that this bar will search and modify.
+     */
     public FindReplaceBar(JTextComponent textComponent) {
         this.textComponent = textComponent;
 

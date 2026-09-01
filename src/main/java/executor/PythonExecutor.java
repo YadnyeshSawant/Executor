@@ -150,89 +150,134 @@ public class PythonExecutor extends JFrame {
      * Placeholder text for the script text area when it's empty.
      */
     private static final String SCRIPT_PLACEHOLDER = "Start typing or load a script...";
+
     /**
      * Single-threaded executor service for running background tasks like script
      * execution and Git commands, ensuring they don't block the UI thread.
      */
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+    // --- UI Components ---
     private JButton runBtn;
     private JPanel mainPanel;
     private JSplitPane mainSplitPane;
     private JSplitPane middleSplitPane;
     private JComboBox<Object> scriptFileCombo;
     private JComboBox<Object> inputFileCombo;
+    /** The main code editor for Python scripts. */
     private RSyntaxTextArea scriptTextArea;
+    /** Text area for providing input to the Python script. */
     private JTextArea inputTextArea;
+    /** Text area for displaying script output, errors, and application logs. */
     private JTextArea outputTextArea;
     private JLabel currentScriptLabel;
     private JDialog settingsDialog;
     private JLabel scriptFolderPathLabel;
     private JLabel inputFolderPathLabel;
+
+    // --- File and Directory Paths ---
+    /** The currently selected directory containing Python scripts. */
     private Path scriptDirectory;
+    /** The currently selected directory containing input files. */
     private Path inputDirectory;
+    /** The directory containing problem statements for the "Load Question" feature. */
     private Path problemDirectory;
+
+    // --- File Lists ---
+    /** A list of all discovered Python script files. */
     private List<Path> allScriptFiles = new ArrayList<>();
+    /** A list of all discovered input files. */
     private List<Path> allInputFiles = new ArrayList<>();
+
+    // --- UI State Management ---
+    /** Stores the last divider location for the main split pane to restore it when toggling visibility. */
     private int lastDividerLocation = -1;
+    /** Stores the last divider location for the middle split pane to restore it when toggling visibility. */
     private int lastMiddleDividerLocation = -1;
+    /** Stores the last divider location for the explorer split pane to restore it. */
     private int lastExplorerSplitPaneLocation = -1;
+    /** Stores the last divider location for the main explorer split pane to restore it. */
     private int lastExplorerMainDividerLocation = -1;
+    /** Tracks the visibility state of the file explorer panel. */
     private boolean isFileExplorerVisible = true;
+    /** Stores the last divider location for the middle split pane in explorer mode. */
     private int lastMiddleDividerLocationExplorer = -1;
+    /** Tracks the visibility state of the output panel. */
     private boolean isOutputVisible = true;
     private JButton toggleOutputBtn;
+
+    // --- Status and Error Tracking ---
+    /** Label in the status bar to show the current error count. */
     private JLabel errorStatusLabel;
+    /** The main search field for filtering files. */
     private JTextField searchField;
+    /** The total number of errors from the last script execution. */
     private int totalErrors = 0;
+    /** The popup menu that displays search results. */
     private JPopupMenu searchResultPopup;
 
+    // --- Panels and Controls ---
     private RoundedPanel scriptSelectionPanel;
     private JPanel allControlsPanel;
     private JButton hideControlsBtn;
     private RoundedPanel versionControlPanel;
+    /** Tracks the visibility state of the main control panels. */
     private boolean areControlsVisible = true;
+    /** Tracks the visibility state of the input panel. */
     private boolean isInputPanelVisible = true;
+    /** Determines if the UI is in "File Explorer" mode or "Classic" mode. */
     private boolean isFileExplorerMode = false;
+    /** Tracks the collapsed state of the input file explorer. */
     private boolean isInputExplorerCollapsed = false;
 
+    // --- Search and Recent Folders ---
+    /** The list model for script file search results. */
     private DefaultListModel<Path> scriptListModel;
+    /** The list model for input file search results. */
     private DefaultListModel<Path> inputListModel;
-
+    /** A list of recently opened folders for quick access. */
     private java.util.LinkedList<Path> recentFolders = new java.util.LinkedList<>();
+    /** The popup menu for displaying recent folders. */
     private JPopupMenu recentFoldersPopup;
     private JButton recentFoldersBtn;
+    /** The maximum number of recent folders to store. */
     private static final int MAX_RECENT_FOLDERS = 5;
 
+    // --- Editor and Text Components ---
+    /** Manages undo and redo operations for the script text area. */
     private UndoManager undoManager;
+    /** The current tab size (in spaces) for the editor. */
     private int currentTabSize = 4; // Default Python tab size
-
     private RTextScrollPane scriptScrollPane;
+
+    // --- File Explorer Components ---
+    /** The tree component for displaying the file system. */
     private JTree fileExplorerTree;
+    /** The right-click context menu for the file explorer. */
     private JPopupMenu explorerContextMenu;
     private JMenuItem editMenuItem;
     private JMenuItem openFolderMenuItem;
     private JMenuItem renameMenuItem;
     private JMenuItem moveMenuItem;
     private JMenuItem deleteMenuItem;
+    /** The path of the item that was right-clicked in the file explorer. */
     private Path contextMenuPath;
     private JSplitPane explorerSplitPane;
-    private JSplitPane explorerMainSplitPane;
     private JPanel fileExplorerContainer;
     private CardLayout fileExplorerCardLayout;
+    /** Key for the CardLayout showing the file explorer tree. */
     private static final String EXPLORER_TREE_VIEW = "EXPLORER_TREE_VIEW";
+    /** Key for the CardLayout showing the "Open Folder" button when no folder is selected. */
     private static final String EXPLORER_EMPTY_VIEW = "EXPLORER_EMPTY_VIEW";
-    private JTree inputFileExplorerTree;
-    private JScrollPane inputFileExplorerScrollPane;
-    private JPanel inputFileExplorerContainer;
-    private CardLayout inputFileExplorerCardLayout;
-    private static final String INPUT_EXPLORER_TREE_VIEW = "INPUT_EXPLORER_TREE_VIEW";
-    private static final String INPUT_EXPLORER_EMPTY_VIEW = "INPUT_EXPLORER_EMPTY_VIEW";
-
     private JScrollPane fileExplorerScrollPane;
 
+    // --- System and Integration ---
+    /** Flag indicating if a Python executable was found on the system PATH. */
     private final boolean isPythonAvailable;
+    /** Manages all Git-related operations. */
     private GitManager gitManager;
     private JButton toggleFileExplorerModeBtn;
+    /** The non-modal dialog for find and replace functionality. */
     private JDialog findDialog;
 
     /**
@@ -1066,7 +1111,6 @@ public class PythonExecutor extends JFrame {
             scriptFolderPathLabel.setText(scriptDirectory.toString());
             loadPythonScripts();
             updateGitManager();
-            populateFileExplorer();
             if (isFileExplorerMode) {
                 fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_TREE_VIEW);
             }
@@ -1075,11 +1119,6 @@ public class PythonExecutor extends JFrame {
             inputDirectory = folder;
             inputFolderPathLabel.setText(inputDirectory.toString());
             loadInputFiles();
-            updateGitManager();
-            populateInputFileExplorer();
-            if (isFileExplorerMode) {
-                inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_TREE_VIEW);
-            }
             addRecentFolder(folder);
         }
     }
@@ -1162,10 +1201,7 @@ public class PythonExecutor extends JFrame {
 
         // If in explorer mode, update the explorer views to show they are empty.
         if (isFileExplorerMode) {
-            populateFileExplorer(); // This will clear the tree model
-            populateInputFileExplorer(); // This will clear the tree model
             fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_EMPTY_VIEW);
-            inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_EMPTY_VIEW);
         }
 
         String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
@@ -1218,10 +1254,13 @@ public class PythonExecutor extends JFrame {
             if (selectedNode != null && selectedNode.isLeaf()) {
                 Object userObject = selectedNode.getUserObject();
                 if (userObject instanceof Path) {
-                    Path selectedPath = (Path) userObject;
-                    // Directly set the item in the combo box. If it's not there,
-                    // it will be added, and then selected to trigger loading.
-                    scriptFileCombo.setSelectedItem(selectedPath);
+                    Path selectedPath = (Path) userObject;                    
+                    String fileName = selectedPath.getFileName().toString().toLowerCase();
+                    if (fileName.endsWith(".py")) {
+                        scriptFileCombo.setSelectedItem(selectedPath);
+                    } else if (fileName.endsWith(".txt")) {
+                        inputFileCombo.setSelectedItem(selectedPath);
+                    }
                 }
             }
         });
@@ -1230,53 +1269,10 @@ public class PythonExecutor extends JFrame {
         JPanel scriptExplorerPanel = new JPanel(new BorderLayout());
         scriptExplorerPanel.setOpaque(false);
         ActionListener newScriptFileAction = e -> createNewItem(scriptDirectory, false);
-        ActionListener newScriptFolderAction = e -> createNewItem(scriptDirectory, true);
-        scriptExplorerPanel.add(createExplorerHeaderPanel("File Explorer", newScriptFolderAction, newScriptFileAction, null), BorderLayout.NORTH);
+        ActionListener newScriptFolderAction = e -> createNewItem(scriptDirectory, true);        scriptExplorerPanel.add(createExplorerHeaderPanel("File Explorer", newScriptFolderAction, newScriptFileAction, null), BorderLayout.NORTH);
         fileExplorerScrollPane = new JScrollPane(fileExplorerTree);
         fileExplorerScrollPane.setBorder(null);
         scriptExplorerPanel.add(fileExplorerScrollPane, BorderLayout.CENTER);
-
-        // --- Input File Explorer Tree ---
-        DefaultMutableTreeNode inputRoot = new DefaultMutableTreeNode();
-        inputFileExplorerTree = new JTree(inputRoot);
-        inputFileExplorerTree.setRootVisible(false);
-        inputFileExplorerTree.setShowsRootHandles(true);
-        inputFileExplorerTree.setCellRenderer(new DefaultTreeCellRenderer() {
-            @Override
-            public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
-                super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
-                if (value instanceof DefaultMutableTreeNode) {
-                    Object userObject = ((DefaultMutableTreeNode) value).getUserObject();
-                    if (userObject instanceof Path) { // This will handle file nodes
-                        setText(((Path) userObject).getFileName().toString());
-                    } // Directory nodes will use their default string name
-                }
-                return this;
-            }
-        });
-        inputFileExplorerTree.addMouseListener(ml);
-
-        inputFileExplorerTree.addTreeSelectionListener(e -> {
-            DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) inputFileExplorerTree.getLastSelectedPathComponent();
-            if (selectedNode != null && selectedNode.isLeaf()) {
-                Object userObject = selectedNode.getUserObject();
-                if (userObject instanceof Path) {
-                    Path selectedPath = (Path) userObject;
-                    // Directly set the item in the combo box. If it's not there,
-                    // it will be added, and then selected to trigger loading.
-                    inputFileCombo.setSelectedItem(selectedPath);
-                }
-            }
-        });
-        JPanel inputExplorerPanel = new JPanel(new BorderLayout());
-        inputExplorerPanel.setOpaque(false);
-        ActionListener newInputFileAction = e -> createNewItem(inputDirectory, false);
-        ActionListener newInputFolderAction = e -> createNewItem(inputDirectory, true);
-        ActionListener collapseAction = e -> toggleInputExplorerCollapse((JButton) e.getSource());
-        inputExplorerPanel.add(createExplorerHeaderPanel("Input Explorer", newInputFolderAction, newInputFileAction, collapseAction), BorderLayout.NORTH);
-        inputFileExplorerScrollPane = new JScrollPane(inputFileExplorerTree);
-        inputFileExplorerScrollPane.setBorder(null);
-        inputExplorerPanel.add(inputFileExplorerScrollPane, BorderLayout.CENTER);
 
         // --- CardLayout for switching between tree and empty view ---
         fileExplorerCardLayout = new CardLayout();
@@ -1294,23 +1290,6 @@ public class PythonExecutor extends JFrame {
         // Add both views (the tree and the empty panel) to the container
         fileExplorerContainer.add(scriptExplorerPanel, EXPLORER_TREE_VIEW);
         fileExplorerContainer.add(emptyViewPanel, EXPLORER_EMPTY_VIEW);
-
-        // --- CardLayout for the Input File Explorer ---
-        inputFileExplorerCardLayout = new CardLayout();
-        inputFileExplorerContainer = new JPanel(inputFileExplorerCardLayout);
-        JPanel emptyInputViewPanel = new JPanel(new BorderLayout());
-        emptyInputViewPanel.add(createExplorerHeaderPanel("Input Explorer", newInputFolderAction, newInputFileAction, collapseAction), BorderLayout.NORTH);
-        JPanel openInputButtonContainer = new JPanel(new GridBagLayout());
-        JButton openInputFolderBtn = new JButton("Open Input Folder");
-        openInputFolderBtn.addActionListener(e -> selectInputFolder());
-        openInputButtonContainer.add(openInputFolderBtn);
-        emptyInputViewPanel.add(openInputButtonContainer, BorderLayout.CENTER);
-        inputFileExplorerContainer.add(inputExplorerPanel, INPUT_EXPLORER_TREE_VIEW);
-        inputFileExplorerContainer.add(emptyInputViewPanel, INPUT_EXPLORER_EMPTY_VIEW);
-
-        explorerMainSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, fileExplorerContainer, inputFileExplorerContainer);
-        explorerMainSplitPane.setResizeWeight(0.5);
-        explorerMainSplitPane.setDividerSize(3);
 
         // This is the new top-level split pane for the explorer mode
         explorerSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -1369,11 +1348,8 @@ public class PythonExecutor extends JFrame {
                 parentNode.add(dirNode);
                 addNodes(dirNode, file); // Recurse
             } else {
-                // Only add python files to the explorer
-                if (file.getName().toLowerCase().endsWith(".py")) {
-                    // Store the full Path object for later use
-                    parentNode.add(new DefaultMutableTreeNode(file.toPath()));
-                }
+                // Store the full Path object for later use
+                parentNode.add(new DefaultMutableTreeNode(file.toPath()));
             }
         }
     }
@@ -1549,14 +1525,6 @@ public class PythonExecutor extends JFrame {
                 }
             }
         }
-        List<TreePath> inputExpandedPaths = new ArrayList<>();
-        if (inputFileExplorerTree != null) {
-            for (int i = 0; i < inputFileExplorerTree.getRowCount(); i++) {
-                if (inputFileExplorerTree.isExpanded(i)) {
-                    inputExpandedPaths.add(inputFileExplorerTree.getPathForRow(i));
-                }
-            }
-        }
 
         if (scriptDirectory != null && path.startsWith(scriptDirectory)) {
             loadPythonScripts();
@@ -1566,9 +1534,6 @@ public class PythonExecutor extends JFrame {
         }
         if (inputDirectory != null && path.startsWith(inputDirectory)) {
             loadInputFiles();
-            populateInputFileExplorer();
-            // Restore expanded paths
-            inputExpandedPaths.forEach(p -> inputFileExplorerTree.expandPath(p));
         }
     }
 
@@ -1596,8 +1561,6 @@ public class PythonExecutor extends JFrame {
             inputFolderPathLabel.setText(inputDirectory.toString());
             addRecentFolder(inputDirectory);
             updateGitManager();
-            loadInputFiles();
-            populateInputFileExplorer();
         }
     }
     /**
@@ -1727,56 +1690,6 @@ public class PythonExecutor extends JFrame {
 
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, "Could not create " + itemType + ":\n" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    /**
-     * Toggles the collapsed/expanded state of the input file explorer panel.
-     *
-     * @param collapseButton The button that triggered the action, used to
-     * update its text/icon.
-     */
-    private void toggleInputExplorerCollapse(JButton collapseButton) {
-        isInputExplorerCollapsed = !isInputExplorerCollapsed;
-        if (isInputExplorerCollapsed) {
-            // Collapse the panel
-            lastExplorerSplitPaneLocation = explorerMainSplitPane.getDividerLocation();
-
-            // --- New logic to collapse leaving header visible ---
-            Component bottomComponent = explorerMainSplitPane.getBottomComponent();
-            int headerHeight = 35; // A sensible default/fallback height
-
-            if (bottomComponent instanceof JPanel) {
-                JPanel container = (JPanel) bottomComponent;
-                // Find the visible card within the CardLayout
-                for (Component comp : container.getComponents()) {
-                    if (comp.isVisible() && comp instanceof JPanel) {
-                        JPanel cardPanel = (JPanel) comp;
-                        if (cardPanel.getLayout() instanceof BorderLayout) {
-                            Component northComponent = ((BorderLayout) cardPanel.getLayout()).getLayoutComponent(BorderLayout.NORTH);
-                            if (northComponent != null) {
-                                headerHeight = northComponent.getPreferredSize().height;
-                            }
-                        }
-                        break; // Found the visible card
-                    }
-                }
-            }
-            int dividerSize = explorerMainSplitPane.getDividerSize();
-            int newLocation = explorerMainSplitPane.getHeight() - headerHeight - dividerSize;
-            explorerMainSplitPane.setDividerLocation(newLocation);
-
-            collapseButton.setText("\u25B2"); // ▲ Up-pointing triangle
-            collapseButton.setToolTipText("Expand");
-        } else {
-            // Expand the panel
-            if (lastExplorerSplitPaneLocation != -1) {
-                explorerMainSplitPane.setDividerLocation(lastExplorerSplitPaneLocation);
-            } else {
-                explorerMainSplitPane.setResizeWeight(0.5); // Fallback to 50/50 split
-            }
-            collapseButton.setText("\u25BC"); // ▼ Down-pointing triangle
-            collapseButton.setToolTipText("Collapse");
         }
     }
 
@@ -2004,7 +1917,7 @@ public class PythonExecutor extends JFrame {
 
             // Re-parent the mainSplitPane into the new explorerSplitPane
             mainPanel.remove(mainSplitPane);
-            explorerSplitPane.setLeftComponent(explorerMainSplitPane);
+            explorerSplitPane.setLeftComponent(fileExplorerContainer);
             explorerSplitPane.setRightComponent(mainSplitPane);
             mainPanel.add(explorerSplitPane, BorderLayout.CENTER);
             explorerSplitPane.setDividerLocation(250);
@@ -2015,12 +1928,6 @@ public class PythonExecutor extends JFrame {
                 fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_TREE_VIEW);
             } else {
                 fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_EMPTY_VIEW);
-            }
-            if (inputDirectory != null) {
-                populateInputFileExplorer();
-                inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_TREE_VIEW);
-            } else {
-                inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_EMPTY_VIEW);
             }
         } else {
             // Exiting File Explorer Mode
@@ -2315,7 +2222,6 @@ public class PythonExecutor extends JFrame {
 
         // Also refresh the explorer views
         populateFileExplorer();
-        populateInputFileExplorer();
 
         // Try to restore the previous selections
         // The ActionListeners on the combo boxes will handle reloading the content
@@ -2490,12 +2396,6 @@ public class PythonExecutor extends JFrame {
             addRecentFolder(scriptDirectory);
             updateGitManager();
             loadPythonScripts();
-            populateFileExplorer();
-
-            // If we are in explorer mode, switch from the "Open Folder" view to the tree view.
-            if (isFileExplorerMode) {
-                fileExplorerCardLayout.show(fileExplorerContainer, EXPLORER_TREE_VIEW);
-            }
         }
     }
 
@@ -2598,12 +2498,6 @@ public class PythonExecutor extends JFrame {
             inputFolderPathLabel.setText(inputDirectory.toString());
             addRecentFolder(inputDirectory);
             updateGitManager();
-            loadInputFiles();
-            populateInputFileExplorer();
-
-            if (isFileExplorerMode) {
-                inputFileExplorerCardLayout.show(inputFileExplorerContainer, INPUT_EXPLORER_TREE_VIEW);
-            }
         }
     }
 
@@ -2867,64 +2761,6 @@ public class PythonExecutor extends JFrame {
             scriptTextArea.select(foundIndex, foundIndex + findText.length());
         } else {
             java.awt.Toolkit.getDefaultToolkit().beep(); // Beep if not found
-        }
-    }
-
-    /**
-     * Populates the input file explorer tree with the contents of the currently
-     * selected input directory.
-     */
-    private void populateInputFileExplorer() {
-        if (inputDirectory == null || inputFileExplorerTree == null) {
-            javax.swing.tree.DefaultTreeModel model = (javax.swing.tree.DefaultTreeModel) inputFileExplorerTree.getModel();
-            DefaultMutableTreeNode root = (DefaultMutableTreeNode) model.getRoot();
-            root.removeAllChildren();
-            model.reload();
-            return;
-        }
-
-        DefaultMutableTreeNode root = new DefaultMutableTreeNode(inputDirectory.getFileName().toString());
-        addInputNodes(root, inputDirectory.toFile());
-
-        javax.swing.tree.DefaultTreeModel model = new javax.swing.tree.DefaultTreeModel(root);
-        inputFileExplorerTree.setModel(model);
-    }
-
-    /**
-     * Recursively adds nodes to the input file explorer tree, representing the
-     * directory structure and files within a given folder.
-     *
-     * @param parentNode The parent {@link DefaultMutableTreeNode} to which new
-     * file/folder nodes will be added.
-     * @param parentFile The parent {@link File} whose contents will be listed.
-     */
-    private void addInputNodes(DefaultMutableTreeNode parentNode, File parentFile) {
-        File[] files = parentFile.listFiles();
-        if (files == null) {
-            return;
-        }
-
-        java.util.Arrays.sort(files, (f1, f2) -> {
-            if (f1.isDirectory() && !f2.isDirectory()) {
-                return -1;
-            }
-            if (!f1.isDirectory() && f2.isDirectory()) {
-                return 1;
-            }
-            return f1.getName().compareToIgnoreCase(f2.getName());
-        });
-
-        for (File file : files) {
-            if (file.isDirectory()) {
-                DefaultMutableTreeNode dirNode = new DefaultMutableTreeNode(file.toPath());
-                parentNode.add(dirNode);
-                addInputNodes(dirNode, file); // Recurse
-            } else {
-                // Only add .txt files to the input explorer
-                if (file.getName().toLowerCase().endsWith(".txt")) {
-                    parentNode.add(new DefaultMutableTreeNode(file.toPath()));
-                }
-            }
         }
     }
 
@@ -3324,7 +3160,7 @@ public class PythonExecutor extends JFrame {
     // --- End Getters ---
 
     /**
-     * A container for the loading screen components to allow them to be updated
+     * A record to hold the loading screen components, allowing them to be updated
      * from the main method.
      *
      * @param window The JWindow of the loading screen.
@@ -3405,7 +3241,7 @@ public class PythonExecutor extends JFrame {
     }
 
     /**
-     * A container for the results of the startup system checks.
+     * A record to hold the results of the startup system checks.
      */
     private static class SystemChecksResult {
 

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
+
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -34,12 +35,26 @@ import javax.swing.border.TitledBorder;
  */
 public class GitManager {
 
+    /** The main application frame, used as a parent for dialogs. */
     private final JFrame parentFrame;
+    /** The service to run background Git commands without blocking the UI. */
     private final ExecutorService executorService;
+    /** A consumer for logging output to the main application's output area. */
     private final Consumer<String> logger;
+    /** The currently selected directory for scripts, used to find a Git repository. */
     private final Path scriptDirectory;
+    /** The currently selected directory for input files, used to find a Git repository. */
     private final Path inputDirectory;
 
+    /**
+     * Constructs a new GitManager.
+     *
+     * @param parentFrame     The main application frame, used for parenting dialogs.
+     * @param executorService The shared executor service for running background tasks.
+     * @param logger          A consumer function to log messages to the application's UI.
+     * @param scriptDirectory The current script directory path.
+     * @param inputDirectory  The current input directory path.
+     */
     public GitManager(JFrame parentFrame, ExecutorService executorService, Consumer<String> logger, Path scriptDirectory, Path inputDirectory) {
         this.parentFrame = parentFrame;
         this.executorService = executorService;
@@ -48,6 +63,11 @@ public class GitManager {
         this.inputDirectory = inputDirectory;
     }
 
+    /**
+     * Creates a TitledBorder with a bold and slightly larger font.
+     * @param title The title for the border.
+     * @return A {@link TitledBorder} with custom styling.
+     */
     private TitledBorder createBoldTitledBorder(String title) {
         TitledBorder border = BorderFactory.createTitledBorder(title);
         Font currentFont = border.getTitleFont();

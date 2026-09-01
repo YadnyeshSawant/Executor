@@ -44,8 +44,15 @@ import javax.swing.table.TableCellRenderer;
  */
 public class SettingsDialog extends JDialog {
 
+    /** The main application frame, used for accessing and modifying settings. */
     private final PythonExecutor executor;
 
+    /**
+     * Constructs the settings dialog.
+     *
+     * @param owner The main {@link PythonExecutor} application frame, which owns
+     *              this dialog and whose settings will be modified.
+     */
     public SettingsDialog(PythonExecutor owner) {
         super(owner, "Settings", true);
         this.executor = owner;
@@ -474,6 +481,9 @@ public class SettingsDialog extends JDialog {
      * A custom TableCellRenderer that uses a JTextArea to display multi-line text.
      */
     private static class MultiLineCellRenderer extends JTextArea implements TableCellRenderer {
+        /**
+         * Constructs a MultiLineCellRenderer, initializing it to wrap text.
+         */
         public MultiLineCellRenderer() {
             setLineWrap(true);
             setWrapStyleWord(true);
